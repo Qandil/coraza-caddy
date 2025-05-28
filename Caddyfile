@@ -1,7 +1,7 @@
 {
 	# Run realip first so Coraza sees the correct client address
 	order realip first
-	order coraza_waf second
+	order coraza_waf after realip
 
 	log {
 		format json
