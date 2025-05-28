@@ -53,6 +53,11 @@
 
 	# 5) Upstream service
 	reverse_proxy {env.BACKEND} {
+		# preserve WebSocket handshake headers
+		header_up Connection {>Connection}
+		header_up Upgrade    {>Upgrade}
+
+		# your existing headers
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
 	}
