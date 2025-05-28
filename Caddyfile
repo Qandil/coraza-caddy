@@ -1,25 +1,32 @@
 {
-	# Make sure the WAF middleware is evaluated before any others
+	# Make sure WAF runs first
 	order coraza_waf first
+	# Turn on JSON logging to stdout so Railway captures it
+	log {
+		format json
+		output stdout
+	}
 }
 
 :{$PORT} {
-	# Mini liveness probe for Railway
 	respond /health 200
 
-	# Security headers
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 	header Content-Security-Policy  upgrade-insecure-requests
 
-	# OWASP Coraza WAF (Core Rule Set auto-loaded by the plugin build)
-	coraza_waf
+	# === WAF proper ===
+	coraza_waf {
+		# 1. Load the OWASP Core Rule Set that was embedded at build time
+		include @owasp_crs                # <— critical line
+		# 2. Make sure we’re in blocking mode
+		directive SecRuleEngine On
+		# 3. Emit audit logs to stdout (Railway → “Logs” tab)
+		auditlog stdout
+	}
 
-	# Proxy everything else to your app
-	# BACKEND is an env-var like "app:3000"
+	# Proxy everything else to your backend
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
-		# header_up X-Forwarded-Port 443     # uncomment if your app expects it
-		# header_up X-Forwarded-Host {host}  # idem
 	}
 }
