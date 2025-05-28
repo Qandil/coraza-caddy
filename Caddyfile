@@ -1,7 +1,6 @@
 {
     order realip first
     order coraza_waf after realip
-
     log {
         format json
         output stdout
@@ -9,11 +8,10 @@
 }
 
 :{$PORT} {
-
-    # 1) Liveness probe
+    # 1) Health check
     respond /health 200
 
-    # 2) Real-IP rewrite (harmless without XFF on Railway)
+    # 2) Real-IP (harmless unless you front with a CDN)
     realip {
         header X-Forwarded-For
         from   100.64.0.0/10
@@ -30,45 +28,50 @@
         -Server
     }
 
-    # 4) Bypass WAF for WebSockets
+    # ─── 4) WS ROUTE (bypass WAF) ────────────────────────────────────────────
     @ws {
         path   /rest/push*
-        header Connection *Upgrade*
+        header Connection Upgrade
     }
-    reverse_proxy @ws {$BACKEND} {
-        transport http {
-            versions 1.1
+    route @ws {
+        reverse_proxy {$BACKEND} {
+            transport http {
+                versions 1.1
+            }
+            flush_interval -1
+            header_up Host              {host}
+            header_up Upgrade           {>Upgrade}
+            header_up Connection        {>Connection}
+            header_up X-Forwarded-Proto {scheme}
         }
-        header_up Host       {host}
-        header_up Upgrade    {>Upgrade}
-        header_up Connection {>Connection}
-        header_up X-Forwarded-Proto {scheme}
     }
 
-    # 5) WAF for everything else
-    coraza_waf {
-        load_owasp_crs
-        directives `
-            Include @coraza.conf-recommended
-            Include @crs-setup.conf.example
-            Include @owasp_crs/*.conf
+    # ─── 5) EVERYTHING ELSE ─────────────────────────────────────────────────
+    route {
+        # WAF
+        coraza_waf {
+            load_owasp_crs
+            directives `
+                Include @coraza.conf-recommended
+                Include @crs-setup.conf.example
+                Include @owasp_crs/*.conf
 
-            # Paranoia level 2
-            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+                # Paranoia 2
+                SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-            # Blocking + slim audit log
-            SecRuleEngine On
-            SecAuditEngine RelevantOnly
-            SecAuditLogParts ABIFHZ
-            SecAuditLog /dev/stdout
-            SecAuditLogFormat json
-        `
-    }
+                SecRuleEngine On
+                SecAuditEngine RelevantOnly
+                SecAuditLogParts ABIFHZ
+                SecAuditLog /dev/stdout
+                SecAuditLogFormat json
+            `
+        }
 
-    # 6) Proxy all other HTTP
-    reverse_proxy {$BACKEND} {
-        header_up Host              {host}
-        header_up X-Forwarded-Proto {scheme}
-        header_up X-Forwarded-Scheme {scheme}
+        # HTTP proxy
+        reverse_proxy {$BACKEND} {
+            header_up Host              {host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Scheme {scheme}
+        }
     }
 }
