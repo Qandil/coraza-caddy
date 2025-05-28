@@ -7,7 +7,6 @@
 }
 
 :{$PORT} {
-	auto_https off
 	respond /health 200
 
 	# Security headers
