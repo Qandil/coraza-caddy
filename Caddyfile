@@ -51,14 +51,22 @@
 		`
 	}
 
-	# 5) Upstream service
+	# 5) Upstream service (with real WebSocket support)
 	reverse_proxy {env.BACKEND} {
-		# preserve WebSocket handshake headers
-		header_up Connection {>Connection}
-		header_up Upgrade    {>Upgrade}
+		# 1) Preserve Host so the backend accepts the handshake
+		header_up Host {host}
 
-		# your existing headers
-		header_up X-Forwarded-Proto  https
-		header_up X-Forwarded-Scheme https
+		# 2) WebSocket handshake headers
+		header_up Upgrade    {>Upgrade}
+		header_up Connection {>Connection}
+
+		# 3) Forward scheme + original host if you need them
+		header_up X-Forwarded-Proto  {scheme}
+		header_up X-Forwarded-Host   {host}
+
+		# 4) Tell Caddy to speak HTTP/1.1 (WebSockets don’t run over HTTP/2)
+		transport http {
+			versions 1.1
+		}
 	}
 }
