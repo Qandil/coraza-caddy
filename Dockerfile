@@ -1,14 +1,13 @@
 ############ 1. BUILD STAGE ############
-FROM caddy:2.10.0-builder-alpine AS builder
+FROM caddy:2.11.4-builder-alpine AS builder
 
-# Build Caddy with the WAF & the latest OWASP CRS bundle
 RUN xcaddy build \
-    --with github.com/caddyserver/realip \
+    --with github.com/caddyserver/realip@v0.3.0 \
     --with github.com/corazawaf/coraza-caddy/v2@v2.0.0 \
     --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0
 
 ############ 2. RUNTIME STAGE ############
-FROM caddy:2.10.0-alpine
+FROM caddy:2.11.4-alpine
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
