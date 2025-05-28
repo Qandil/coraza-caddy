@@ -1,17 +1,30 @@
-# syntax=docker/dockerfile:1
-# 1. Use the official Caddy image that already bundles the Coraza WAF module
-FROM ghcr.io/coreruleset/coraza-caddy:2.10.0
+############ 1. BUILD STAGE ############
+#  ▸ Pull the official “builder” flavour of Caddy 2.10 (includes xcaddy)
+#    Tag list: hub.docker.com/_/caddy → 2.10.0-builder-alpine :contentReference[oaicite:0]{index=0}
+FROM caddy:2.10.0-builder-alpine AS builder
 
-# 2. Copy in our Caddyfile
+#  ▸ Compile Caddy with the Coraza WAF plugin + Core Rule Set wrapper
+#    Plugin repo & tag: github.com/corazawaf/coraza-caddy/v2@v2.0.0-rc.3 :contentReference[oaicite:1]{index=1}
+RUN xcaddy build \
+    --with github.com/corazawaf/coraza-caddy/v2@v2.0.0-rc.3 \
+    --with github.com/corazawaf/coraza-coreruleset@v0.4.5
+
+############ 2. RUNTIME STAGE ############
+#  ▸ Use the slim Alpine runtime image
+FROM caddy:2.10.0-alpine
+
+#  ▸ Copy the custom Caddy binary we just built
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+
+#  ▸ Copy our Caddyfile (lives next to this Dockerfile in git)
 COPY Caddyfile /etc/caddy/Caddyfile
 
-# 3. Expose the port Railway will assign (8080 is conventional)
-ENV PORT=8080
+#  ▸ Standard Railway convention: expose a single dynamic port
+ENV PORT 8080
 EXPOSE 8080
 
-# 4. Health-check for Railway’s deployment UI
+#  ▸ Simple liveness endpoint so Railway’s health-check passes
 HEALTHCHECK --interval=30s --timeout=3s CMD \
   wget -qO- http://localhost:${PORT}/health || exit 1
 
-# 5. Start Caddy
-ENTRYPOINT [ "caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile" ]
+ENTRYPOINT ["caddy","run","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"]
