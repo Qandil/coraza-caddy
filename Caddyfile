@@ -1,6 +1,8 @@
 {
+    # Order realip first, then anything else
     order realip first
     order coraza_waf after realip
+
     log {
         format json
         output stdout
@@ -8,10 +10,10 @@
 }
 
 :{$PORT} {
-    # 1) Health check
+    # 1) Health probe
     respond /health 200
 
-    # 2) Real-IP (harmless unless you front with a CDN)
+    # 2) Real-IP rewrite (harmless if no XFF)
     realip {
         header X-Forwarded-For
         from   100.64.0.0/10
@@ -28,27 +30,19 @@
         -Server
     }
 
-    # ─── 4) WS ROUTE (bypass WAF) ────────────────────────────────────────────
-    @ws {
-        path   /rest/push*
-        header Connection Upgrade
-    }
-    route @ws {
-        reverse_proxy {$BACKEND} {
-            transport http {
-                versions 1.1
-            }
-            flush_interval -1
-            header_up Host              {host}
-            header_up Upgrade           {>Upgrade}
-            header_up Connection        {>Connection}
-            header_up X-Forwarded-Proto {scheme}
-        }
+    # ──────── WS BYPASS ────────────────────────────────────────────────
+    @ws path /rest/push*
+    reverse_proxy @ws {$BACKEND} {
+        transport http { versions 1.1 }
+        flush_interval -1
+        header_up Host       {host}
+        header_up Upgrade    {>Upgrade}
+        header_up Connection {>Connection}
     }
 
-    # ─── 5) EVERYTHING ELSE ─────────────────────────────────────────────────
-    route {
-        # WAF
+    # ──────── WAF FOR EVERYTHING ELSE ─────────────────────────────────
+    @notws not path /rest/push*
+    route @notws {
         coraza_waf {
             load_owasp_crs
             directives `
@@ -66,8 +60,6 @@
                 SecAuditLogFormat json
             `
         }
-
-        # HTTP proxy
         reverse_proxy {$BACKEND} {
             header_up Host              {host}
             header_up X-Forwarded-Proto {scheme}
