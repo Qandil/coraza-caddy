@@ -1,5 +1,8 @@
 {
-	order coraza_waf first
+	# Run realip first so Coraza sees the correct client address
+	order realip first
+	order coraza_waf second
+
 	log {
 		format json
 		output stdout
@@ -7,9 +10,22 @@
 }
 
 :{$PORT} {
-	respond /health 200
 
-	# Security headers
+	# ─────────────────────────────────────────────────
+	# 1) Health endpoint (Railway’s liveness probe)
+	respond /health 200
+	# ─────────────────────────────────────────────────
+
+	# ─────────────────────────────────────────────────
+	# 2) Real-IP rewrite: trust Railway’s NAT range
+	realip {
+		header X-Forwarded-For
+		from   100.64.0.0/10          # Railway edge → container
+	}
+	# ─────────────────────────────────────────────────
+
+	# ─────────────────────────────────────────────────
+	# 3) Security headers
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		Content-Security-Policy  upgrade-insecure-requests
@@ -17,10 +33,12 @@
 		Permissions-Policy       interest-cohort=()
 		X-Content-Type-Options   nosniff
 		X-Frame-Options          SAMEORIGIN
-		-Server                  # strip Caddy server header
+		-Server
 	}
+	# ─────────────────────────────────────────────────
 
-	# ---------- CORAZA WAF ----------
+	# ─────────────────────────────────────────────────
+	# 4) Coraza WAF + OWASP CRS
 	coraza_waf {
 		load_owasp_crs
 		directives `
@@ -28,10 +46,10 @@
 			Include @crs-setup.conf.example
 			Include @owasp_crs/*.conf
 
-			# Paranoia level 2 (more rules) — keep default score threshold = 5
+			# Paranoia level 2
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-			# Blocking mode and leaner audit log
+			# Blocking mode + slim audit log
 			SecRuleEngine On
 			SecAuditEngine RelevantOnly
 			SecAuditLogParts ABIFHZ
@@ -39,10 +57,13 @@
 			SecAuditLogFormat json
 		`
 	}
+	# ─────────────────────────────────────────────────
 
-	# Reverse-proxy upstream
+	# ─────────────────────────────────────────────────
+	# 5) Upstream service
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
 	}
+	# ─────────────────────────────────────────────────
 }
