@@ -3,6 +3,7 @@ FROM caddy:2.10.0-builder-alpine AS builder
 
 # Build Caddy with the WAF & the latest OWASP CRS bundle
 RUN xcaddy build \
+    --with github.com/caddyserver/realip \
     --with github.com/corazawaf/coraza-caddy/v2@v2.0.0 \
     --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0
 
