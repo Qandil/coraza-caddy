@@ -1,8 +1,6 @@
 {
-	# realip stays first (harmless without X-Forwarded-For)
 	order realip first
 	order coraza_waf after realip
-
 	log {
 		format json
 		output stdout
@@ -11,13 +9,13 @@
 
 :{$PORT} {
 
-	# 1) Liveness probe
+	# 1) Health check
 	respond /health 200
 
-	# 2) Attempt real-IP rewrite (works only if upstream CDN adds the header)
+	# 2) Real-IP (harmless without a real XFF header)
 	realip {
 		header X-Forwarded-For
-		from   100.64.0.0/10   # Railway NAT range
+		from   100.64.0.0/10
 	}
 
 	# 3) Security headers
@@ -31,18 +29,34 @@
 		-Server
 	}
 
-	# 4) Coraza WAF + CRS-v4
+	# ─────────────────────────────────────────────────
+	# 4) Handle WebSocket upgrade on /rest/push *before* WAF
+	@ws {
+		path   /rest/push*
+		header Connection *Upgrade*
+	}
+	reverse_proxy @ws {env.BACKEND} {
+		# must speak HTTP/1.1
+		transport http { versions 1.1 }
+
+		# forward Host + handshake headers
+		header_up Host       {host}
+		header_up Upgrade    {>Upgrade}
+		header_up Connection {>Connection}
+
+		# preserve scheme if your app uses it
+		header_up X-Forwarded-Proto {scheme}
+	}
+	# ─────────────────────────────────────────────────
+
+	# 5) Everything else goes through the WAF
 	coraza_waf {
 		load_owasp_crs
 		directives `
 			Include @coraza.conf-recommended
 			Include @crs-setup.conf.example
 			Include @owasp_crs/*.conf
-
-			# Paranoia level 2 (silent)
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
-
-			# Blocking mode + slim audit log
 			SecRuleEngine On
 			SecAuditEngine RelevantOnly
 			SecAuditLogParts ABIFHZ
@@ -51,22 +65,10 @@
 		`
 	}
 
-	# 5) Upstream service (with real WebSocket support)
+	# 6) Proxy all other HTTP
 	reverse_proxy {env.BACKEND} {
-		# 1) Preserve Host so the backend accepts the handshake
-		header_up Host {host}
-
-		# 2) WebSocket handshake headers
-		header_up Upgrade    {>Upgrade}
-		header_up Connection {>Connection}
-
-		# 3) Forward scheme + original host if you need them
-		header_up X-Forwarded-Proto  {scheme}
-		header_up X-Forwarded-Host   {host}
-
-		# 4) Tell Caddy to speak HTTP/1.1 (WebSockets don’t run over HTTP/2)
-		transport http {
-			versions 1.1
-		}
+		header_up Host              {host}
+		header_up X-Forwarded-Proto  https
+		header_up X-Forwarded-Scheme https
 	}
 }
