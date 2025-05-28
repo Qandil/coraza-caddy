@@ -1,0 +1,9 @@
+{
+	order coraza_waf first
+}
+
+:{$PORT} {
+	coraza_waf
+	reverse_proxy {env.BACKEND}
+	trusted_proxies private_ranges
+}
