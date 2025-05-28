@@ -4,5 +4,7 @@
 
 :{$PORT} {
 	coraza_waf
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+	header Content-Security-Policy  "upgrade-insecure-requests"
 	reverse_proxy {env.BACKEND}
 }
