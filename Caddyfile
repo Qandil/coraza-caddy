@@ -40,7 +40,7 @@
 			Include @owasp_crs/*.conf
 
 			# Paranoia level 2 (silent)
-			SecAction "id:900000,phase:1,nolog,pass,setvar:'tx.paranoia_level=2'"
+			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
 			# Blocking mode + slim audit log
 			SecRuleEngine On
