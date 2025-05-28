@@ -1,5 +1,4 @@
 {
-	# WAF must run first; enable JSON logs to stdout for Railway
 	order coraza_waf first
 	log {
 		format json
@@ -8,28 +7,42 @@
 }
 
 :{$PORT} {
+	auto_https off
 	respond /health 200
 
-	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-	header Content-Security-Policy  upgrade-insecure-requests
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		Content-Security-Policy  upgrade-insecure-requests
+		Referrer-Policy          no-referrer
+		Permissions-Policy       interest-cohort=()
+		X-Content-Type-Options   nosniff
+		X-Frame-Options          SAMEORIGIN
+		-Server                  # strip Caddy server header
+	}
 
 	# ---------- CORAZA WAF ----------
 	coraza_waf {
-		# Mount the Core Rule Set that was compiled into the binary
 		load_owasp_crs
-
-		# Feed SecLang instructions (back-tick block!)
 		directives `
 			Include @coraza.conf-recommended
 			Include @crs-setup.conf.example
 			Include @owasp_crs/*.conf
+
+			# Anomaly scoring tweaks
+			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+			SecAction "id:900110,phase:1,setvar:'tx.inbound_anomaly_score_threshold=10'"
+
+			# Blocking mode and leaner audit log
 			SecRuleEngine On
-			SecAuditLog /dev/stdout          # put audit events on stdout
+			SecAuditEngine RelevantOnly
+			SecAuditLogParts ABIFHZ
+			SecAuditLog /dev/stdout
 			SecAuditLogFormat json
 		`
 	}
 
-	# Reverse-proxy to your upstream
+	# Reverse-proxy upstream
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
