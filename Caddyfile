@@ -3,10 +3,19 @@
 }
 
 :{$PORT} {
-	# response headers go first, then the WAF, then the proxy
+	# Tell browsers to stay on HTTPS
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 	header Content-Security-Policy  upgrade-insecure-requests
 
+	# WAF
 	coraza_waf
-	reverse_proxy {env.BACKEND}
+
+	# Proxy to the backend and flag the original scheme as HTTPS
+	reverse_proxy {env.BACKEND} {
+		header_up X-Forwarded-Proto  https
+		header_up X-Forwarded-Scheme https
+		# (optional) some apps also like these:
+		# header_up X-Forwarded-Port   443
+		# header_up X-Forwarded-Host   {host}
+	}
 }
