@@ -1,7 +1,6 @@
 {
-	# Make sure WAF runs first
+	# WAF must run first; enable JSON logs to stdout for Railway
 	order coraza_waf first
-	# Turn on JSON logging to stdout so Railway captures it
 	log {
 		format json
 		output stdout
@@ -14,17 +13,23 @@
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 	header Content-Security-Policy  upgrade-insecure-requests
 
-	# === WAF proper ===
+	# ---------- CORAZA WAF ----------
 	coraza_waf {
-		# 1. Load the OWASP Core Rule Set that was embedded at build time
-		include @owasp_crs                # <— critical line
-		# 2. Make sure we’re in blocking mode
-		directive SecRuleEngine On
-		# 3. Emit audit logs to stdout (Railway → “Logs” tab)
-		auditlog stdout
+		# Mount the Core Rule Set that was compiled into the binary
+		load_owasp_crs
+
+		# Feed SecLang instructions (back-tick block!)
+		directives `
+			Include @coraza.conf-recommended
+			Include @crs-setup.conf.example
+			Include @owasp_crs/*.conf
+			SecRuleEngine On
+			SecAuditLog /dev/stdout          # put audit events on stdout
+			SecAuditLogFormat json
+		`
 	}
 
-	# Proxy everything else to your backend
+	# Reverse-proxy to your upstream
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
