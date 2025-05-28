@@ -50,7 +50,7 @@
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
 			# --- Tell Coraza to trust Railway and use X-Forwarded-For ---
-			SecTrustedProxies 100.64.0.0/10
+			SecTrustedProxy  100.64.0.0/10
 			SecRemoteAddrHeader X-Forwarded-For
 
 			# Blocking mode + slim audit log
