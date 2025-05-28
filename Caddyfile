@@ -1,5 +1,5 @@
 {
-	# Run realip first so Coraza sees the correct client address
+	# realip stays first (harmless without X-Forwarded-For)
 	order realip first
 	order coraza_waf after realip
 
@@ -11,20 +11,15 @@
 
 :{$PORT} {
 
-	# ─────────────────────────────────────────────────
-	# 1) Health endpoint (Railway’s liveness probe)
+	# 1) Liveness probe
 	respond /health 200
-	# ─────────────────────────────────────────────────
 
-	# ─────────────────────────────────────────────────
-	# 2) Real-IP rewrite: trust Railway’s NAT range
+	# 2) Attempt real-IP rewrite (works only if upstream CDN adds the header)
 	realip {
 		header X-Forwarded-For
-		from   100.64.0.0/10          # Railway edge → container
+		from   100.64.0.0/10   # Railway NAT range
 	}
-	# ─────────────────────────────────────────────────
 
-	# ─────────────────────────────────────────────────
 	# 3) Security headers
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
@@ -35,10 +30,8 @@
 		X-Frame-Options          SAMEORIGIN
 		-Server
 	}
-	# ─────────────────────────────────────────────────
 
-	# ─────────────────────────────────────────────────
-	# 4) Coraza WAF + OWASP CRS
+	# 4) Coraza WAF + CRS-v4
 	coraza_waf {
 		load_owasp_crs
 		directives `
@@ -49,11 +42,6 @@
 			# Paranoia level 2
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-			# ── REAL CLIENT IP ──────────────────────────────
-			SecRemoteAddrHeader        X-Forwarded-For
-			SecRemoteAddrTrustedProxy  100.64.0.0/10
-			# ────────────────────────────────────────────────
-
 			# Blocking mode + slim audit log
 			SecRuleEngine On
 			SecAuditEngine RelevantOnly
@@ -62,13 +50,10 @@
 			SecAuditLogFormat json
 		`
 	}
-	# ─────────────────────────────────────────────────
 
-	# ─────────────────────────────────────────────────
 	# 5) Upstream service
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
 	}
-	# ─────────────────────────────────────────────────
 }
