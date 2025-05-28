@@ -7,10 +7,8 @@
 }
 
 :{$PORT} {
-	auto_https off
 	respond /health 200
 
-	# Security headers
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		Content-Security-Policy  upgrade-insecure-requests
@@ -18,7 +16,7 @@
 		Permissions-Policy       interest-cohort=()
 		X-Content-Type-Options   nosniff
 		X-Frame-Options          SAMEORIGIN
-		-Server                  # strip Caddy server header
+		-Server
 	}
 
 	# ---------- CORAZA WAF ----------
@@ -29,10 +27,14 @@
 			Include @crs-setup.conf.example
 			Include @owasp_crs/*.conf
 
-			# Paranoia level 2 (more rules) — keep default score threshold = 5
+			# Paranoia-2
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-			# Blocking mode and leaner audit log
+			# --- Trust Railway edge ---
+			SecRemoteAddrTrustedProxy 100.64.0.0/10
+			SecRemoteAddrHeader X-Forwarded-For
+
+			# Blocking mode + slim audit log
 			SecRuleEngine On
 			SecAuditEngine RelevantOnly
 			SecAuditLogParts ABIFHZ
@@ -41,7 +43,6 @@
 		`
 	}
 
-	# Reverse-proxy upstream
 	reverse_proxy {env.BACKEND} {
 		header_up X-Forwarded-Proto  https
 		header_up X-Forwarded-Scheme https
