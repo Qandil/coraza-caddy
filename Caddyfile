@@ -8,25 +8,7 @@
 	header Content-Security-Policy  upgrade-insecure-requests
 
 	# WAF
-	coraza_waf {
-		# Main configuration file
-		include /opt/coraza/config/coraza.conf
-		# User defined configuration files
-		include /opt/coraza/config.d/*.conf
-		# OWASP CRS Setup
-		include /opt/coraza/config/crs-setup.conf
-		# OWASP CRS Plugins Setup
-		include /opt/coraza/owasp-crs/plugins/*-config.conf
-		include /opt/coraza/owasp-crs/plugins/*-before.conf
-		# OWASP CRS
-		include /opt/coraza/owasp-crs/*.conf
-		# OWASP CRS Plugins After
-		include /opt/coraza/owasp-crs/plugins/*-after.conf
-		# Other baked in rule sets
-		include /opt/coraza/rules/*.conf
-		# User defined rule sets
-		include /opt/coraza/rules.d/*.conf
-	}
+	coraza_waf
 
 	# Proxy to the backend and flag the original scheme as HTTPS
 	reverse_proxy {env.BACKEND} {
