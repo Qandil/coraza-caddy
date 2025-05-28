@@ -1,8 +1,8 @@
-FROM caddy:2.8-builder AS builder
-RUN xcaddy build --with github.com/corazawaf/coraza-caddy/v2
+# --------------------------------------------------
+# runtime image that already bundles Caddy + Coraza
+# --------------------------------------------------
+FROM openpanel/caddy-coraza:latest
 
-# ---------- runtime ----------
-FROM caddy:2.8-alpine
-COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+# your Caddyfile goes into the standard location
 COPY Caddyfile /etc/caddy/Caddyfile
-CMD ["caddy","run","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"]
+# DO **NOT** set CMD or ENTRYPOINT – keep the image default
