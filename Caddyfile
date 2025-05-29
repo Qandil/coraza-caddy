@@ -1,38 +1,85 @@
 {
     order realip first
     order coraza_waf after realip
+    
+    # Add rate limiting order
+    order rate_limit after coraza_waf
 
+    # Enhanced logging with more security-relevant fields
     log {
         format json
         output stdout
-        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+        include http.request.header.x-real-ip 
+                http.request.remote_host 
+                http.response.status 
+                http.request.uri 
+                http.request.method
+                http.request.header.user-agent
+                http.request.header.x-forwarded-for
+                http.request.duration
+    }
+    
+    # Global error handling
+    handle_errors {
+        respond "Service temporarily unavailable" 503
     }
 }
 
 :{$PORT} {
+    # Health check endpoint
     respond /health 200
 
+    # Real IP detection with expanded trusted ranges
     realip {
         header X-Forwarded-For  
         header X-Real-IP
-        from   100.64.0.0/10
+        header CF-Connecting-IP  # Cloudflare
+        header True-Client-IP    # Akamai
+        from   100.64.0.0/10     # Carrier-grade NAT
+        from   10.0.0.0/8        # Private networks
+        from   172.16.0.0/12     # Private networks
+        from   192.168.0.0/16    # Private networks
     }
 
+    # Define matchers
     @not_websocket {
         not header Connection *upgrade*
         not header Upgrade websocket
     }
-
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Security-Policy  upgrade-insecure-requests
-        Referrer-Policy          no-referrer
-        Permissions-Policy       interest-cohort=()
-        X-Content-Type-Options   nosniff
-        X-Frame-Options          SAMEORIGIN
-        -Server
+    
+    @static_files {
+        path *.css *.js *.png *.jpg *.jpeg *.gif *.ico *.svg *.woff *.woff2
     }
 
+    # Rate limiting (adjust as needed)
+    rate_limit @not_websocket {
+        zone static_ip {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+
+    # Enhanced security headers
+    header {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "default-src 'self'; upgrade-insecure-requests"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        
+        # Remove server identification
+        -Server
+        -X-Powered-By
+        
+        # Cache control for static files
+        @static_files Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # WAF with enhanced configuration
     coraza_waf @not_websocket {
         load_owasp_crs
         directives `
@@ -40,18 +87,69 @@
             Include @crs-setup.conf.example
             Include @owasp_crs/*.conf
 
+            # Enhanced paranoia level and configurations
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+            SecAction "id:900001,phase:1,setvar:'tx.max_num_args=255'"
+            SecAction "id:900002,phase:1,setvar:'tx.arg_name_length=100'"
+            SecAction "id:900003,phase:1,setvar:'tx.arg_length=4000'"
+            SecAction "id:900004,phase:1,setvar:'tx.total_arg_length=64000'"
+            SecAction "id:900005,phase:1,setvar:'tx.max_file_size=1048576'"
+            SecAction "id:900006,phase:1,setvar:'tx.combined_file_sizes=1048576'"
+
+            # Rate limiting at WAF level
+            SecAction "id:900007,phase:1,setvar:'tx.dos_burst_time_slice=60'"
+            SecAction "id:900008,phase:1,setvar:'tx.dos_counter_threshold=50'"
 
             SecRuleEngine On
             SecAuditEngine RelevantOnly
             SecAuditLogParts ABIFHZ
             SecAuditLog /dev/stdout
             SecAuditLogFormat json
+            
+            # Custom rule to block common bad bots
+            SecRule REQUEST_HEADERS:User-Agent "@detectSQLi" \
+                "id:1001,phase:1,block,msg:'Malicious User Agent detected',\
+                logdata:'User-Agent: %{REQUEST_HEADERS.user-agent}'"
         `
     }
 
+    # Reverse proxy with enhanced configuration
     reverse_proxy {env.BACKEND} {
-        header_up X-Forwarded-Proto  https
+        # Headers
+        header_up X-Forwarded-Proto https
         header_up X-Forwarded-Scheme https
+        header_up X-Real-IP {remote_host}
+        
+        # Timeouts and limits
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 10s
+        }
+        
+        # Health checking
+        health_uri /health
+        health_interval 30s
+        health_timeout 5s
+        
+        # Load balancing (if you have multiple backends)
+        lb_policy round_robin
+        
+        # Fail timeout
+        fail_duration 30s
+        max_fails 3
+    }
+
+    # Handle errors gracefully
+    handle_errors {
+        @4xx expression {http.error.status_code} >= 400 && {http.error.status_code} < 500
+        @5xx expression {http.error.status_code} >= 500
+        
+        handle @4xx {
+            respond "Bad Request" {http.error.status_code}
+        }
+        
+        handle @5xx {
+            respond "Service Unavailable" 503
+        }
     }
 }
