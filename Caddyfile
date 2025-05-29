@@ -48,7 +48,7 @@
 		#    • inline styles whose SHA-256 hash matches the one below
 		#  ───────────────────────────────────────────────
 		Content-Security-Policy "
-			default-src 'self';
+			# default-src 'self';
 			style-src 'self' 'unsafe-inline';
 			upgrade-insecure-requests;
 		"
