@@ -7,14 +7,6 @@
         output stdout
         include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
     }
-
-    log security {
-        format json
-        output net {env.GRAFANA_LOKI_URL}/loki/api/v1/push {
-            Authorization "Bearer {env.GRAFANA_API_KEY}"
-        }
-        level WARN
-    }
 }
 
 :{$PORT} {
