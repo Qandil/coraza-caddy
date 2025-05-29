@@ -11,7 +11,18 @@
 :{$PORT} {
 	respond /health 200
 
-	    # Cloudflare sends real IPs in CF-Connecting-IP and X-Forwarded-For
+	# Debug: Log all headers to see what Cloudflare is sending
+	@debug_headers {
+	        path /debug-headers
+	}
+	respond @debug_headers `
+	        CF-Connecting-IP: {header.cf-connecting-ip}
+	        X-Forwarded-For: {header.x-forwarded-for}
+	        X-Real-IP: {header.x-real-ip}
+	        Remote-Addr: {remote_host}
+	` 200
+
+	# Cloudflare sends real IPs in CF-Connecting-IP and X-Forwarded-For
 	realip {
 		header CF-Connecting-IP
 		header X-Forwarded-For
