@@ -15,7 +15,7 @@ COPY Caddyfile /etc/caddy/Caddyfile
 ENV PORT 8080
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=3s CMD \
-  wget -qO- http://localhost:${PORT}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD \
+	curl -f http://localhost:${PORT}/health || exit 1
 
 ENTRYPOINT ["caddy","run","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"]
