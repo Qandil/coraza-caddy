@@ -2,20 +2,10 @@
     order realip first
     order coraza_waf after realip
 
-    # Enhanced logging with more security-relevant fields
     log {
         format json
         output stdout
-        include http.request.header.x-real-ip 
-                http.request.remote_ip
-                http.request.host
-                http.response.status 
-                http.request.uri 
-                http.request.method
-                http.request.header.user-agent
-                http.request.header.x-forwarded-for
-                http.request.duration
-                http.response.size
+        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
     }
 }
 
