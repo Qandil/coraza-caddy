@@ -6,11 +6,6 @@
         format json
         output stdout
         include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
-        format filter {
-            wrap with `{
-                "message": "{request.method} {request.uri} - {resp.status} from {request.remote_host}",
-            }`
-        }
     }
 }
 
