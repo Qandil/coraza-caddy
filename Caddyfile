@@ -14,11 +14,6 @@
 
     encode gzip zstd
 
-	tls {
-		protocols tls1.2 tls1.3
-		ciphers TLS_AES_128_GCM_SHA256 TLS_AES_256_GCM_SHA384
-	}
-
     realip {
         header X-Forwarded-For  
         header X-Real-IP
