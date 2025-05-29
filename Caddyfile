@@ -1,67 +1,83 @@
 {
-    order realip first
-    order coraza_waf after realip
+	# Plug-in execution order
+	order realip first
+	order coraza_waf after realip
 
-    log {
-        format json {
-            time_format iso8601
-        }
-        output stdout
-        include http.request.header.x-real-ip http.request.remote_host \
-                http.response.status http.request.uri http.request.method
-    }
+	# Structured logging
+	log {
+		format json {
+			time_format iso8601
+		}
+		output stdout
+		include http.request.header.x-real-ip \
+				http.request.remote_host \
+				http.response.status \
+				http.request.uri \
+				http.request.method
+	}
 }
 
 :{$PORT} {
 
-    # Health check
-    respond /health 200 {
-        body "OK"
-    }
+	# Liveness / readiness probe
+	respond /health 200 {
+		body "OK"
+	}
 
-    # Trust addresses coming from your edge/LB only
-    realip {
-        header X-Forwarded-For
-        header X-Real-IP
-        from   100.64.0.0/10
-    }
+	# Trust only requests coming from your load-balancer network
+	realip {
+		header X-Forwarded-For
+		header X-Real-IP
+		from   100.64.0.0/10
+	}
 
-    # Match all non-websocket requests
-    @not_websocket {
-        not header Connection *upgrade*
-        not header Upgrade    websocket
-    }
+	# Match every request that is NOT a WebSocket upgrade
+	@not_websocket {
+		not header Connection *upgrade*
+		not header Upgrade    websocket
+	}
 
-    # Security headers
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Security-Policy   "default-src 'self'; upgrade-insecure-requests"
-        Referrer-Policy           no-referrer
-        Permissions-Policy        interest-cohort=()
-        X-Content-Type-Options    nosniff
-        X-Frame-Options           SAMEORIGIN
-        -Server
-    }
+	# Security headers (CSP now includes the inline-style hash)
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 
-    # OWASP-CRS powered WAF (skipped for websockets)
-    coraza_waf @not_websocket {
-        load_owasp_crs
-        directives `
-            Include @coraza.conf-recommended
-            Include @crs-setup.conf.example
-            Include @owasp_crs/*.conf
+		# ───────────────────────────────────────────────
+		#  Content-Security-Policy
+		#  Allows only:
+		#    • resources from this origin ('self')
+		#    • inline styles whose SHA-256 hash matches the one below
+		#  ───────────────────────────────────────────────
+		Content-Security-Policy "
+			default-src 'self';
+			style-src 'self' 'unsafe-inline';
+			upgrade-insecure-requests;
+		"
 
-            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+		Referrer-Policy        no-referrer
+		Permissions-Policy     interest-cohort=()
+		X-Content-Type-Options nosniff
+		X-Frame-Options        SAMEORIGIN
+		-Server
+	}
 
-            SecRuleEngine On
-            SecAuditEngine RelevantOnly
-            SecAuditLogParts ABIFHZ
-            SecAuditLog /dev/stdout
-            SecAuditLogFormat json
-        `
-    }
+	# OWASP-CRS WAF (bypassed for WebSockets)
+	coraza_waf @not_websocket {
+		load_owasp_crs
+		directives `
+			Include @coraza.conf-recommended
+			Include @crs-setup.conf.example
+			Include @owasp_crs/*.conf
 
-    # Pass everything else to the backend defined at container runtime:
-    #   docker run -e BACKEND=http://my-app:9000 …
-    reverse_proxy {env.BACKEND}
+			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+
+			SecRuleEngine On
+			SecAuditEngine RelevantOnly
+			SecAuditLogParts ABIFHZ
+			SecAuditLog /dev/stdout
+			SecAuditLogFormat json
+		`
+	}
+
+	# Upstream application (set at run time with the BACKEND env var)
+	reverse_proxy {env.BACKEND}
 }
