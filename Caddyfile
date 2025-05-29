@@ -42,14 +42,6 @@
 
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-            # Force Coraza to use the real IP from headers for logging
-            SecRule REQUEST_HEADERS:X-Real-IP "^(.+)$" \
-                "id:1001,phase:1,pass,nolog,setvar:'tx.real_ip=%{MATCHED_VAR}'"
-
-            # Override the remote address for audit logging
-            SecAction "id:1002,phase:1,pass,nolog,\
-                setvar:'tx.client_ip=%{REQUEST_HEADERS.X-Real-IP}'"
-
             SecRuleEngine On
             SecAuditEngine RelevantOnly
             SecAuditLogParts ABIFHZ
