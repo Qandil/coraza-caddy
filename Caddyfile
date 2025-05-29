@@ -7,13 +7,13 @@
         output stdout
         include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
     }
-
-    # Global compression
-    encode gzip zstd
 }
 
 :{$PORT} {
     respond /health 200
+
+    # Global compression
+    encode gzip zstd
 
     realip {
         header X-Forwarded-For  
