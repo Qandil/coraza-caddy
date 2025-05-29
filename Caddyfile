@@ -5,6 +5,7 @@
     log {
         format json
         output stdout
+        include http.request.header.x-real-ip http.request.remote_host
     }
 }
 
