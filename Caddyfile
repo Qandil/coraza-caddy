@@ -33,36 +33,17 @@
 			Include @crs-setup.conf.example
 			Include @owasp_crs/*.conf
 
-			# Paranoia level 2
 			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-			# Blocking mode + slim audit log
 			SecRuleEngine On
 			SecAuditEngine RelevantOnly
 			SecAuditLogParts ABIFHZ
 			SecAuditLog /dev/stdout
 			SecAuditLogFormat json
 
-			# Allow WebSocket upgrade headers
 			SecRule REQUEST_HEADERS:Connection "@contains upgrade" \
-				"id:1001,phase:1,t:lowercase,chain"
-			SecRule REQUEST_HEADERS:Upgrade "@rx ^websocket$" \
-				"id:1002,phase:1,t:lowercase,pass,nolog,\
+				"id:1001,phase:1,t:lowercase,pass,nolog,\
 				ctl:ruleRemoveById=920350"
-
-			# Validate WebSocket key format
-			SecRule REQUEST_HEADERS:Sec-WebSocket-Key "@rx ^[A-Za-z0-9+/]{22}==$" \
-				"id:1003,phase:1,pass,nolog"
-
-			# Rate limiting for WebSocket connections
-			SecRule REQUEST_HEADERS:Upgrade "@rx ^websocket$" \
-				"id:1004,phase:1,pass,nolog,\
-				setvar:'ip.websocket_requests=+1',\
-				expirevar:'ip.websocket_requests=60'"
-			
-			SecRule IP:WEBSOCKET_REQUESTS "@gt 10" \
-				"id:1005,phase:1,block,\
-				msg:'Too many WebSocket handshake attempts'"
 		`
 	}
 
