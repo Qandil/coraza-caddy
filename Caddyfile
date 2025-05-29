@@ -1,79 +1,78 @@
 {
-    debug
-    log {
-        format json
-        output stdout
-        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
-    }
+	debug
+	log {
+		format json
+		output stdout
+		include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+	}
 }
 
 :{$PORT} {
-    tls {
-        protocols tls1.2 tls1.3
-    }
+	tls {
+		protocols tls1.2 tls1.3
+	}
 
-    handle /health* {
-        respond "OK" 200
-    }
+	handle /health* {
+		respond 'OK' 200
+	}
 
-    route {
-        realip {
-            header X-Forwarded-For
-            header X-Real-IP
-            from 100.64.0.0/10
-        }
+	route {
+		realip {
+			header X-Forwarded-For
+			header X-Real-IP
+			from 100.64.0.0/10
+		}
 
-        @not_ws {
-            not header Connection *upgrade*
-            not header Upgrade websocket
-        }
+		@not_ws {
+			not header Connection *upgrade*
+			not header Upgrade websocket
+		}
 
-        coraza_waf @not_ws {
-            load_owasp_crs
-            directives `
-                Include @coraza.conf-recommended
-                Include @crs-setup.conf.example
-                Include @owasp_crs/*.conf
+		coraza_waf @not_ws {
+			load_owasp_crs
+			directives `
+				Include @coraza.conf-recommended
+				Include @crs-setup.conf.example
+				Include @owasp_crs/*.conf
 
-                SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
-                SecRuleEngine On
-                SecAuditEngine RelevantOnly
-                SecAuditLogParts ABIFHZ
-                SecAuditLog /dev/stdout
-                SecAuditLogFormat json
-            `
-        }
+				SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+				SecRuleEngine On
+				SecAuditEngine RelevantOnly
+				SecAuditLogParts ABIFHZ
+				SecAuditLog /dev/stdout
+				SecAuditLogFormat json
+			`
+		}
 
-        header {
-            Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-            Content-Security-Policy  upgrade-insecure-requests
-            Referrer-Policy          no-referrer
-            Permissions-Policy       interest-cohort=()
-            X-Content-Type-Options   nosniff
-            X-Frame-Options          SAMEORIGIN
-            -Server
-        }
+		header {
+			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+			Content-Security-Policy  upgrade-insecure-requests
+			Referrer-Policy          no-referrer
+			Permissions-Policy       interest-cohort=()
+			X-Content-Type-Options   nosniff
+			X-Frame-Options          SAMEORIGIN
+			-Server
+		}
 
-        @rl {
-            path *
-        }
-        rate_limit @rl {
-            zone default {
-                key     {http.request.remote.host}
-                events  100
-                window  1m
-            }
-        }
+		@rl {
+			path *
+		}
+		rate_limit @rl {
+			zone default {
+				key    {http.request.remote.host}
+				events 100
+				window 1m
+			}
+		}
 
-        reverse_proxy @not_ws {$BACKEND} {
-            header_up X-Forwarded-Proto  https
-            header_up X-Forwarded-Scheme https
+		reverse_proxy @not_ws {$BACKEND} {
+			header_up X-Forwarded-Proto  https
+			header_up X-Forwarded-Scheme https
 
-            transport http {
-                read_buffer  4096
-                write_buffer 4096
-                idle_timeout 30s
-            }
-        }
-    }
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 30s
+			}
+		}
+	}
 }
