@@ -26,7 +26,13 @@
 		-Server
 	}
 
-	coraza_waf {
+	# Skip WAF entirely for WebSocket upgrade requests
+	@not_websocket {
+		not header Connection *upgrade*
+		not header Upgrade websocket
+	}
+
+	coraza_waf @not_websocket {
 		load_owasp_crs
 		directives `
 			Include @coraza.conf-recommended
@@ -40,10 +46,6 @@
 			SecAuditLogParts ABIFHZ
 			SecAuditLog /dev/stdout
 			SecAuditLogFormat json
-
-			SecRule REQUEST_HEADERS:Connection "@contains upgrade" \
-				"id:1001,phase:1,t:lowercase,pass,nolog,\
-				ctl:ruleRemoveById=920350"
 		`
 	}
 
