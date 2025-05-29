@@ -1,84 +1,64 @@
 {
-	order realip first
-	order coraza_waf after realip
+    order realip first
+    order coraza_waf after realip
 
-	log {
-		format json
-		output stdout
-	}
+    log {
+        format json
+        output stdout
+    }
 }
 
 :{$PORT} {
-	respond /health 200
+    respond /health 200
 
-	# Debug: Log all headers to see what Cloudflare is sending
-	@debug_headers {
-	        path /debug-headers
-	}
-	respond @debug_headers `
-	        CF-Connecting-IP: {header.cf-connecting-ip}
-	        X-Forwarded-For: {header.x-forwarded-for}
-	        X-Real-IP: {header.x-real-ip}
-	        Remote-Addr: {remote_host}
-	` 200
+    realip {
+        header X-Forwarded-For  
+        header X-Real-IP
+        from   100.64.0.0/10
+    }
 
-	# Cloudflare sends real IPs in CF-Connecting-IP and X-Forwarded-For
-	realip {
-		header CF-Connecting-IP
-		header X-Forwarded-For
-		from   100.64.0.0/10      # Railway NAT range
-		from   173.245.48.0/20    # Cloudflare IP ranges
-		from   103.21.244.0/22
-		from   103.22.200.0/22
-		from   103.31.4.0/22
-		from   141.101.64.0/18
-		from   108.162.192.0/18
-		from   190.93.240.0/20
-		from   188.114.96.0/20
-		from   197.234.240.0/22
-		from   198.41.128.0/17
-		from   162.158.0.0/15
-		from   104.16.0.0/13
-		from   104.24.0.0/14
-		from   172.64.0.0/13
-		from   131.0.72.0/22
-	}
+    @not_websocket {
+        not header Connection *upgrade*
+        not header Upgrade websocket
+    }
 
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		Content-Security-Policy  upgrade-insecure-requests
-		Referrer-Policy          no-referrer
-		Permissions-Policy       interest-cohort=()
-		X-Content-Type-Options   nosniff
-		X-Frame-Options          SAMEORIGIN
-		-Server
-	}
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy  upgrade-insecure-requests
+        Referrer-Policy          no-referrer
+        Permissions-Policy       interest-cohort=()
+        X-Content-Type-Options   nosniff
+        X-Frame-Options          SAMEORIGIN
+        -Server
+    }
 
-	# Skip WAF entirely for WebSocket upgrade requests
-	@not_websocket {
-		not header Connection *upgrade*
-		not header Upgrade websocket
-	}
+    coraza_waf @not_websocket {
+        load_owasp_crs
+        directives `
+            Include @coraza.conf-recommended
+            Include @crs-setup.conf.example
+            Include @owasp_crs/*.conf
 
-	coraza_waf @not_websocket {
-		load_owasp_crs
-		directives `
-			Include @coraza.conf-recommended
-			Include @crs-setup.conf.example
-			Include @owasp_crs/*.conf
+            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
+            # Force Coraza to use the real IP from headers for logging
+            SecRule REQUEST_HEADERS:X-Real-IP "^(.+)$" \
+                "id:1001,phase:1,pass,nolog,setvar:'tx.real_ip=%{MATCHED_VAR}'"
 
-			SecRuleEngine On
-			SecAuditEngine RelevantOnly
-			SecAuditLogParts ABIFHZ
-			SecAuditLog /dev/stdout
-			SecAuditLogFormat json
-		`
-	}
+            # Override the remote address for audit logging
+            SecAction "id:1002,phase:1,pass,nolog,\
+                setvar:'tx.client_ip=%{REQUEST_HEADERS.X-Real-IP}'"
 
-	reverse_proxy {env.BACKEND} {
-		header_up X-Forwarded-Proto  https
-		header_up X-Forwarded-Scheme https
-	}
+            SecRuleEngine On
+            SecAuditEngine RelevantOnly
+            SecAuditLogParts ABIFHZ
+            SecAuditLog /dev/stdout
+            SecAuditLogFormat json
+        `
+    }
+
+    reverse_proxy {env.BACKEND} {
+        header_up X-Forwarded-Proto  https
+        header_up X-Forwarded-Scheme https
+    }
 }
