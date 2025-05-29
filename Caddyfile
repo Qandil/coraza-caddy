@@ -1,5 +1,7 @@
 {
-    debug
+    order realip first
+    order coraza_waf after realip
+
     log {
         format json
         output stdout
@@ -7,68 +9,49 @@
     }
 }
 
-http://:{$PORT} {
-    handle /health* {
-        respond "OK" 200
+:{$PORT} {
+    respond /health 200
+
+    realip {
+        header X-Forwarded-For  
+        header X-Real-IP
+        from   100.64.0.0/10
     }
 
-    route {
-        realip {
-            header X-Forwarded-For
-            header X-Real-IP
-            from 100.64.0.0/10
-        }
+    @not_websocket {
+        not header Connection *upgrade*
+        not header Upgrade websocket
+    }
 
-        @not_ws {
-            not header Connection *upgrade*
-            not header Upgrade websocket
-        }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy  upgrade-insecure-requests
+        Referrer-Policy          no-referrer
+        Permissions-Policy       interest-cohort=()
+        X-Content-Type-Options   nosniff
+        X-Frame-Options          SAMEORIGIN
+        -Server
+    }
 
-        coraza_waf @not_ws {
-            load_owasp_crs
-            directives `
-                Include @coraza.conf-recommended
-                Include @crs-setup.conf.example
-                Include @owasp_crs/*.conf
+    coraza_waf @not_websocket {
+        load_owasp_crs
+        directives `
+            Include @coraza.conf-recommended
+            Include @crs-setup.conf.example
+            Include @owasp_crs/*.conf
 
-                SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
-                SecRuleEngine On
-                SecAuditEngine RelevantOnly
-                SecAuditLogParts ABIFHZ
-                SecAuditLog /dev/stdout
-                SecAuditLogFormat json
-            `
-        }
+            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-        header {
-            Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-            Content-Security-Policy  upgrade-insecure-requests
-            Referrer-Policy          no-referrer
-            Permissions-Policy       interest-cohort=()
-            X-Content-Type-Options   nosniff
-            X-Frame-Options          SAMEORIGIN
-            -Server
-        }
+            SecRuleEngine On
+            SecAuditEngine RelevantOnly
+            SecAuditLogParts ABIFHZ
+            SecAuditLog /dev/stdout
+            SecAuditLogFormat json
+        `
+    }
 
-        @rl {
-            path *
-        }
-        rate_limit @rl {
-            zone default {
-                key    {http.request.remote.host}
-                events 100
-                window 1m
-            }
-        }
-
-        reverse_proxy @not_ws {$BACKEND} {
-            header_up X-Forwarded-Proto  https
-            header_up X-Forwarded-Scheme https
-
-            transport http {
-                dial_timeout             5s
-                response_header_timeout 30s
-            }
-        }
+    reverse_proxy {env.BACKEND} {
+        header_up X-Forwarded-Proto  https
+        header_up X-Forwarded-Scheme https
     }
 }
