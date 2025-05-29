@@ -1,38 +1,35 @@
 {
-	# global options
 	debug
 	log {
 		format json
 		output stdout
 		include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
 	}
-	# TLS defaults
+}
+
+:{$PORT} {
+	# TLS fine-tuning inside the site block
 	tls {
 		protocols tls1.2 tls1.3
 		ciphersuites TLS_AES_128_GCM_SHA256 TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256
 	}
-}
 
-:{$PORT} {
-	# health endpoint, out of the main route
 	handle /health* {
 		respond 'OK' 200
 	}
 
-	# main request pipeline
 	route {
-		# real IP
 		realip {
 			header X-Forwarded-For
 			header X-Real-IP
 			from 100.64.0.0/10
 		}
 
-		# WAF only on non-websocket
 		@not_ws {
 			not header Connection *upgrade*
 			not header Upgrade websocket
 		}
+
 		coraza_waf @not_ws {
 			load_owasp_crs
 			directives `
@@ -49,7 +46,6 @@
 			`
 		}
 
-		# common security headers
 		header {
 			Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 			Content-Security-Policy  upgrade-insecure-requests
@@ -60,22 +56,15 @@
 			-Server
 		}
 
-		# rate-limit abusive clients (optional)
+		# optional rate-limit
 		@ratelimit {
 			path *
 		}
 		rate_limit @ratelimit {
-			# 100 req per minute per IP
 			rate 100r/m
 			burst 20
 		}
 
-		# metrics endpoint (optional)
-		# handle /metrics* {
-		# 	prometheus
-		# }
-
-		# finally, proxy non-ws traffic
 		reverse_proxy @not_ws {env.BACKEND} {
 			header_up X-Forwarded-Proto  https
 			header_up X-Forwarded-Scheme https
