@@ -1,82 +1,57 @@
 {
-	# Plug-in execution order
-	order realip first
-	order coraza_waf after realip
+    order realip first
+    order coraza_waf after realip
 
-	# Structured logging
-	log {
-		format json {
-			time_format iso8601
-		}
-		output stdout
-		include http.request.header.x-real-ip \
-				http.request.remote_host \
-				http.response.status \
-				http.request.uri \
-				http.request.method
-	}
+    log {
+        format json
+        output stdout
+        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+    }
 }
 
 :{$PORT} {
+    respond /health 200
 
-	# Liveness / readiness probe
-	respond /health 200 {
-		body "OK"
-	}
+    realip {
+        header X-Forwarded-For  
+        header X-Real-IP
+        from   100.64.0.0/10
+    }
 
-	# Trust only requests coming from your load-balancer network
-	realip {
-		header X-Forwarded-For
-		header X-Real-IP
-		from   100.64.0.0/10
-	}
+    @not_websocket {
+        not header Connection *upgrade*
+        not header Upgrade websocket
+    }
 
-	# Match every request that is NOT a WebSocket upgrade
-	@not_websocket {
-		not header Connection *upgrade*
-		not header Upgrade    websocket
-	}
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy  upgrade-insecure-requests
+        Referrer-Policy          no-referrer
+        Permissions-Policy       interest-cohort=()
+        X-Content-Type-Options   nosniff
+        X-Frame-Options          SAMEORIGIN
+        -Server
+    }
 
-	# Security headers (CSP now includes the inline-style hash)
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    coraza_waf @not_websocket {
+        load_owasp_crs
+        directives `
+            Include @coraza.conf-recommended
+            Include @crs-setup.conf.example
+            Include @owasp_crs/*.conf
 
-		# ───────────────────────────────────────────────
-		#  Content-Security-Policy
-		#  Allows only:
-		#    • resources from this origin ('self')
-		#    • inline styles whose SHA-256 hash matches the one below
-		#  ───────────────────────────────────────────────
-		Content-Security-Policy "
-			style-src 'self' 'unsafe-inline';
-			upgrade-insecure-requests;
-		"
+            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
 
-		Referrer-Policy        no-referrer
-		Permissions-Policy     interest-cohort=()
-		X-Content-Type-Options nosniff
-		X-Frame-Options        SAMEORIGIN
-		-Server
-	}
+            SecRuleEngine On
+            SecAuditEngine RelevantOnly
+            SecAuditLogParts ABIFHZ
+            SecAuditLog /dev/stdout
+            SecAuditLogFormat json
+        `
+    }
 
-	# OWASP-CRS WAF (bypassed for WebSockets)
-	coraza_waf @not_websocket {
-		load_owasp_crs
-		directives `
-			Include @coraza.conf-recommended
-			Include @crs-setup.conf.example
-			Include @owasp_crs/*.conf
-
-			SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
-
-			SecRuleEngine On
-			SecAuditEngine RelevantOnly
-			SecAuditLogParts ABIFHZ
-			SecAuditLog /dev/stdout
-			SecAuditLogFormat json
-		`
-	}
-
-	# Upstream application (set at run time with the BACKEND env var)
-	reverse_proxy {env.BACKEND}
+    reverse_proxy {env.BACKEND} {
+        header_up X-Forwarded-Proto  https
+        header_up X-Forwarded-Scheme https
+    }
 }
