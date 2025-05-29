@@ -20,7 +20,7 @@
         realip {
             header X-Forwarded-For
             header X-Real-IP
-            from   100.64.0.0/10
+            from 100.64.0.0/10
         }
 
         @not_ws {
