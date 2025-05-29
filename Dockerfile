@@ -1,5 +1,5 @@
-############ 1. BUILD STAGE ############
-FROM caddy:2.10.4-builder-alpine AS builder
+############ 1. BUILD STAGE  ############
+FROM caddy:2.10-builder AS builder
 
 RUN xcaddy build \
     --with github.com/kirsch33/realip@v1.6.1 \
@@ -7,7 +7,7 @@ RUN xcaddy build \
     --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0
 
 ############ 2. RUNTIME STAGE ############
-FROM caddy:2.10.4-alpine
+FROM caddy:2.10-alpine
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile
