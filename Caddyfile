@@ -3,17 +3,23 @@
     order coraza_waf after realip
 
     log {
-        format json {
-            time_key       ts
-            level_key      level
-            name_key       logger
-            caller_key     caller
-            message_key    msg
-            time_format    rfc3339
-            duration_format ms
-        }
         output stdout
         include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+
+        format json {
+            time_key    timestamp
+            level_key   severity
+            message_key message
+        }    
+        level ERROR {
+            status >= 500
+        }
+        level WARN {
+            status >= 400
+        }
+        level INFO {
+            status < 400
+        }
     }
 }
 
