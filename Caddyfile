@@ -5,7 +5,7 @@
     log {
         format json
         output stdout
-        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method http.request.header.user-agent http.request.header.cf-connecting-ip http.request.header.cf-ipcountry
     }
 }
 
@@ -16,6 +16,7 @@
     realip {
         header X-Forwarded-For
         header X-Real-IP
+        header CF-Connecting-IP  # if you're using Cloudflare
         from   100.64.0.0/10
     }
 
