@@ -5,11 +5,10 @@
 
 :{$PORT} {
     respond /health 200
-
     encode gzip zstd
 
     realip {
-        header X-Forwarded-For  
+        header X-Forwarded-For
         header X-Real-IP
         from   100.64.0.0/10
     }
@@ -35,9 +34,7 @@
             Include @coraza.conf-recommended
             Include @crs-setup.conf.example
             Include @owasp_crs/*.conf
-
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
-
             SecRuleEngine On
             SecAuditEngine RelevantOnly
             SecAuditLogParts ABIFHZ
@@ -51,7 +48,6 @@
         header_up X-Forwarded-Scheme https
     }
 
-    # ——— ACCESS LOGGING ———
     log {
         output stdout
 
@@ -61,16 +57,17 @@
                 level_key   severity
                 message_key message
             }
-            fields {
-                request>remote_ip
-                request>client_ip
-                request>method
-                request>uri       rename message
-                response>status
-                response>duration
-                request>headers>User-Agent
+            include \
+                request>remote_ip \
+                request>client_ip \
+                request>method \
+                request>uri \
+                response>status \
+                response>duration \
+                request>headers>User-Agent \
                 request>headers>Referer
-            }
+
+            rename request>uri message
         }
     }
 }
