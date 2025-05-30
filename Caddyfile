@@ -1,26 +1,6 @@
 {
     order realip first
     order coraza_waf after realip
-
-    log {
-        output stdout
-        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
-
-        format json {
-            time_key    timestamp
-            level_key   severity
-            message_key message
-        }    
-        level ERROR {
-            status >= 500
-        }
-        level WARN {
-            status >= 400
-        }
-        level INFO {
-            status < 400
-        }
-    }
 }
 
 :{$PORT} {
@@ -69,5 +49,28 @@
     reverse_proxy {env.BACKEND} {
         header_up X-Forwarded-Proto  https
         header_up X-Forwarded-Scheme https
+    }
+
+    # ——— ACCESS LOGGING ———
+    log {
+        output stdout
+
+        format filter {
+            wrap json {
+                time_key    timestamp
+                level_key   severity
+                message_key message
+            }
+            fields {
+                request>remote_ip
+                request>client_ip
+                request>method
+                request>uri       rename message
+                response>status
+                response>duration
+                request>headers>User-Agent
+                request>headers>Referer
+            }
+        }
     }
 }
