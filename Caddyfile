@@ -1,6 +1,12 @@
 {
     order realip first
     order coraza_waf after realip
+
+    log {
+        format json
+        output stdout
+        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method
+    }
 }
 
 :{$PORT} {
@@ -46,27 +52,5 @@
     reverse_proxy {env.BACKEND} {
         header_up X-Forwarded-Proto  https
         header_up X-Forwarded-Scheme https
-    }
-
-    log {
-        output stdout
-
-        format filter {
-            # pull nested fields up to top-level keys
-            request>remote_ip           rename remote_ip
-            request>client_ip           rename client_ip
-            request>method              rename method
-            request>uri                 rename message
-            response>status             rename status
-            response>duration           rename duration
-            request>headers>User-Agent  rename user_agent
-            request>headers>Referer     rename referer
-
-            # finally, wrap everything as JSON
-            wrap json {
-                time_key    timestamp
-                level_key   severity
-            }
-        }
     }
 }
