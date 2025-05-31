@@ -13,11 +13,9 @@
 
     respond /health 200
     
-    # Smart compression - exclude binary content AND WebSockets
+    # Smart compression - only compress text-based content
     encode gzip zstd {
         match {
-            not header Connection *Upgrade*
-            not header Upgrade websocket
             header Content-Type text/*
             header Content-Type application/json*
             header Content-Type application/javascript*
