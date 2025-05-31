@@ -1,22 +1,18 @@
 {
     order realip first
     order coraza_waf after realip
-
-    log {
-        format json
-        output stdout
-        include http.request.header.x-real-ip http.request.remote_host http.response.status http.request.uri http.request.method http.request.header.user-agent http.request.header.cf-connecting-ip http.request.header.cf-ipcountry
-    }
 }
 
 :{$PORT} {
+    log
+
     respond /health 200
     encode gzip zstd
 
     realip {
         header X-Forwarded-For
         header X-Real-IP
-        header CF-Connecting-IP  # if you're using Cloudflare
+        header CF-Connecting-IP
         from   100.64.0.0/10
     }
 
@@ -41,17 +37,14 @@
             Include @coraza.conf-recommended
             Include @crs-setup.conf.example
             Include @owasp_crs/*.conf
-            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
             SecRuleEngine On
             SecAuditEngine RelevantOnly
             SecAuditLogParts ABCDEFGHIJKZ
             SecAuditLog /dev/stdout
             SecAuditLogFormat json
+            SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
             SecAction "id:900001,phase:1,pass,setvar:'tx.blocking_paranoia_level=2'"
             SecAction "id:900002,phase:1,pass,setvar:'tx.detection_paranoia_level=2'"
-            SecDebugLog /dev/stderr
-            SecDebugLogLevel 9
-            SecComponentSignature "Coraza WAF v3.x"
         `
     }
 
