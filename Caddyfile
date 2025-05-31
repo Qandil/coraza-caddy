@@ -1,33 +1,19 @@
 {
     order realip first
-    order rate_limit before coraza_waf
     order coraza_waf after realip
-    admin off
 }
 
 :{$PORT} {
-    log {
-        format json
-        level INFO
-    }
+    log
 
-    # Health check (before other processing)
-    handle /health {
-        respond "OK" 200 {
-            close
-        }
-    }
-
+    respond /health 200
     encode gzip zstd
 
     realip {
         header X-Forwarded-For
         header X-Real-IP
         header CF-Connecting-IP
-        from 100.64.0.0/10
-        from 10.0.0.0/8
-        from 172.16.0.0/12
-        strict
+        from   100.64.0.0/10
     }
 
     @not_websocket {
@@ -35,20 +21,16 @@
         not header Upgrade websocket
     }
 
-    # Enhanced security headers
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        Content-Security-Policy upgrade-insecure-requests"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "camera=(), microphone=(), geolocation=()"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
+        Content-Security-Policy  upgrade-insecure-requests
+        Referrer-Policy          no-referrer
+        Permissions-Policy       interest-cohort=()
+        X-Content-Type-Options   nosniff
+        X-Frame-Options          SAMEORIGIN
         -Server
-        -X-Powered-By
     }
 
-    # WAF with improved configuration
     coraza_waf @not_websocket {
         load_owasp_crs
         directives `
@@ -59,26 +41,19 @@
             SecAuditLog /dev/stdout
             SecAuditLogFormat json
             SecDebugLog /dev/stderr
-            SecDebugLogLevel {$WAF_DEBUG_LEVEL:1}
+            SecDebugLogLevel 3
             SecComponentSignature "Coraza WAF v3.x"
             SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=2"
             SecAction "id:900002,phase:1,nolog,pass,t:none,setvar:tx.detection_paranoia_level=2"
             SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
-            SecAction "id:900020,phase:1,nolog,pass,t:none,setvar:tx.max_file_size=52428800"
             Include @crs-setup.conf.example
             Include @owasp_crs/*.conf
         `
     }
 
-    reverse_proxy {$BACKEND} {
-        header_up X-Forwarded-Proto https
+    reverse_proxy {env.BACKEND} {
+        header_up X-Forwarded-Proto  https
         header_up X-Forwarded-Scheme https
-        header_up X-Real-IP {remote_host}
-        
-        # Health check for backend
-        health_uri /health
-        health_interval 30s
-        health_timeout 5s
     }
 }
