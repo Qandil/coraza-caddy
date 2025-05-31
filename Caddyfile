@@ -173,7 +173,7 @@
         }
         
         reverse_proxy {env.BACKEND} {
-            header_up Host {upstream_hostport}
+            header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
@@ -195,7 +195,7 @@
     # 3. Handle large uploads
     handle @large_upload {
         reverse_proxy {env.BACKEND} {
-            header_up Host {upstream_hostport}
+            header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
@@ -214,7 +214,7 @@
     # 4. Default handler for everything else
     handle {
         reverse_proxy {env.BACKEND} {
-            header_up Host {upstream_hostport}
+            header_up Host {host}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
