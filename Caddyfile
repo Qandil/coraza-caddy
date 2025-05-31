@@ -1,5 +1,6 @@
 {
     order realip first
+    order rate_limit before coraza_waf
     order coraza_waf after realip
 }
 
