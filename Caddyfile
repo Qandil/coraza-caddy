@@ -43,9 +43,10 @@
         X-Download-Options "noopen"
         X-Permitted-Cross-Domain-Policies "none"
 
-        Referrer-Policy          no-referrer
+        # Existing headers
+        Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=()"
-        X-Content-Type-Options   nosniff
+        X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         X-XSS-Protection "1; mode=block"
         Cache-Control "no-cache, no-store, must-revalidate"
