@@ -58,9 +58,11 @@
     reverse_proxy {env.BACKEND} {
         header_up X-Forwarded-Proto  https
         header_up X-Forwarded-Scheme https
-        timeout 30s
-        dial_timeout 5s
-        header_timeout 10s
-        response_header_timeout 10s
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 10s
+            read_timeout 30s
+            write_timeout 30s
+        }
     }
 }
