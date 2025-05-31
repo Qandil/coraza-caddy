@@ -18,11 +18,8 @@
 
     # Rate limiting - 100 requests per minute per real IP
     rate_limit {
-        zone ratelimit_zone {
-            key {http.request.remote.host}
-            events 100
-            window 1m
-        }
+        key {http.request.remote.host}
+        rate 100r/m
     }
 
     @not_websocket {
