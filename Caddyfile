@@ -17,6 +17,15 @@
         from   100.64.0.0/10
     }
 
+    rate_limit {
+        # General rate limit per IP
+        zone general {
+            key    {remote_host}
+            events 60
+            window 1m
+        }
+    }
+
     @not_websocket {
         not header Connection *upgrade*
         not header Upgrade websocket
