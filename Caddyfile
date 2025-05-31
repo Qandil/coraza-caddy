@@ -21,7 +21,7 @@
         # General rate limit per IP
         zone general {
             key    {remote_host}
-            events 60
+            events 100
             window 1m
         }
     }
