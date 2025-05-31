@@ -166,6 +166,15 @@
     
     # Handle streaming/range requests with optimized settings
     handle @streaming {
+        # Add specific headers for streaming
+        header {
+            Accept-Ranges bytes
+            Access-Control-Allow-Origin *
+            Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+            Access-Control-Allow-Headers "Range, Content-Type"
+            Access-Control-Expose-Headers "Content-Length, Content-Range, Accept-Ranges"
+        }
+        
         reverse_proxy {env.BACKEND} {
             header_up Host {http.reverse_proxy.upstream.hostport}
             header_up X-Real-IP {remote_host}
@@ -184,7 +193,17 @@
             
             # Critical for streaming
             flush_interval -1
+            
+            # Handle response codes for streaming
+            handle_response @streaming_response {
+                respond "" 206
+            }
         }
+    }
+    
+    # Define streaming response matcher
+    @streaming_response {
+        status 5xx
     }
     
     # Handle large uploads with appropriate timeouts
@@ -252,17 +271,22 @@
 
     # === ERROR HANDLING ===
     handle_errors {
-        # Suppress common streaming errors
+        # More comprehensive streaming error detection
         @streaming_errors {
-            expression {http.error.status_text} == "broken pipe" || {http.error.status_text} == "stream error" || {http.error.status_text} == "context canceled"
+            expression {err.id} == "reverseproxy.statuserror" && {http.request.header.Range} != ""
+        }
+        
+        @context_canceled {
+            expression {err.msg} == "reading: context canceled" || {err.msg} == "writing: write tcp" || {err.msg} == "aborting with incomplete response"
         }
         
         @rate_limit expression {http.error.status_code} == 429
         @forbidden expression {http.error.status_code} == 403
-        @server_error expression {http.error.status_code} >= 500
+        @server_error expression {http.error.status_code} >= 500 && {http.request.header.Range} == ""
         
-        # Return 200 for expected streaming interruptions
-        respond @streaming_errors 200
+        # Don't log streaming interruptions as errors
+        respond @streaming_errors "" 206
+        respond @context_canceled "" 206
         
         respond @rate_limit "Too Many Requests - Please slow down" 429
         respond @forbidden "Access Denied" 403
