@@ -18,7 +18,10 @@
 
     # Rate limiting - 100 requests per minute per real IP
     route {
-        rate_limit 100-M {http.request.remote.host}
+        rate_limit {
+            key {http.request.remote.host}
+            rate 100-M
+        }
     }
 
     @not_websocket {
