@@ -41,12 +41,6 @@
             Include @coraza.conf-recommended
             Include @crs-setup.conf.example
             Include @owasp_crs/*.conf
-
-            # Debug log—prints matched rule IDs + messages to stdout
-            SecDebugLog     /dev/stdout
-            SecDebugLogLevel 9
-            SecDebugLogFormat json
-
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
             SecRuleEngine On
             SecAuditEngine RelevantOnly
