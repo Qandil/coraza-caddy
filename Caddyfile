@@ -20,7 +20,8 @@
     route {
         rate_limit {
             key {http.request.remote.host}
-            rate 100-M
+            window 1m
+            max_requests 100
         }
     }
 
