@@ -42,6 +42,8 @@
             SecAuditLogParts ABCDEFGHIJKZ
             SecAuditLog /dev/stdout
             SecAuditLogFormat json
+            SecDebugLog /dev/stderr
+            SecDebugLogLevel 3
             SecComponentSignature "Coraza WAF v3.x"
             SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=2"
