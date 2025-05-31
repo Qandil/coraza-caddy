@@ -45,22 +45,73 @@
     }
 
     coraza_waf @not_websocket {
+        # Load the OWASP Core Rule Set plugin
         load_owasp_crs
+        
         directives `
+            # === CORE CONFIGURATION FILES ===
+            # Load Coraza recommended baseline settings (security defaults)
             Include @coraza.conf-recommended
-            SecRuleEngine On
-            SecAuditEngine RelevantOnly
-            SecAuditLogParts ABCDEFGHIJKZ
-            SecAuditLog /dev/stdout
-            SecAuditLogFormat json
-            SecDebugLog /dev/stderr
-            SecDebugLogLevel 3
-            SecComponentSignature "Coraza WAF v3.x"
-            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
-            SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=2"
-            SecAction "id:900002,phase:1,nolog,pass,t:none,setvar:tx.detection_paranoia_level=2"
-            SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
+            
+            # Load CRS setup configuration (must come before CRS rules)
+            # Contains variable definitions and basic setup that CRS rules depend on
             Include @crs-setup.conf.example
+            
+            # === WAF ENGINE SETTINGS ===
+            # Enable the WAF engine to actively block malicious requests
+            SecRuleEngine On
+            
+            # Allow WAF to inspect request bodies (POST data, file uploads, etc.)
+            SecRequestBodyAccess On
+            
+            # Disable response body inspection (saves performance, only inspect requests)
+            SecResponseBodyAccess Off
+            
+            # === REQUEST BODY LIMITS ===
+            # Maximum request body size: 200MB (allows large file uploads)
+            SecRequestBodyLimit 209715200
+            
+            # Maximum request body size for non-file uploads: 1MB (forms, JSON, etc.)
+            SecRequestBodyNoFilesLimit 1048576
+            
+            # === PARANOIA LEVEL CONFIGURATION ===
+            # Paranoia Level 1 = Basic protection (fewer false positives)
+            # Higher levels = more aggressive but more false positives
+            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=1"
+            
+            # Blocking paranoia level - determines which rules actually block requests
+            SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
+            
+            # Define allowed HTTP methods for your application
+            SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
+            
+            # === AUDIT LOGGING CONFIGURATION ===
+            # Only log relevant security events (not every request)
+            SecAuditEngine RelevantOnly
+            
+            # Log parts: A=Audit log header, B=Request headers, C=Request body, 
+            # D=Reserved, E=Response body, F=Response headers, G=Reserved, 
+            # H=Audit log trailer, I=Request body alternative, J=Request headers alternative,
+            # K=List of rules matched, Z=Final boundary
+            SecAuditLogParts ABCDEFGHIJKZ
+            
+            # Send audit logs to stdout (captured by Railway logs)
+            SecAuditLog /dev/stdout
+            
+            # Use JSON format for structured logging (easier to parse)
+            SecAuditLogFormat json
+            
+            # === DEBUG LOGGING ===
+            # Send debug information to stderr
+            SecDebugLog /dev/stderr
+            
+            # Debug level 1 = Errors only (production appropriate)
+            # Level 3+ = Verbose (only for debugging issues)
+            SecDebugLogLevel 1
+            
+            # === LOAD SECURITY RULES ===
+            # Load all OWASP Core Rule Set rules (MUST be last)
+            # These are the actual security rules that detect attacks
             Include @owasp_crs/*.conf
         `
     }
