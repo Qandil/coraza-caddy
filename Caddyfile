@@ -44,8 +44,9 @@
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
             SecRuleEngine On
             SecAuditEngine RelevantOnly
-            SecAuditLogParts ABIFHZ
+            SecAuditLogParts ABIMEFHZ
             SecAuditLog /dev/stdout
+            SecDebugLogLevel 9
             SecAuditLogFormat json
         `
     }
