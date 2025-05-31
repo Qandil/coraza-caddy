@@ -193,17 +193,7 @@
             
             # Critical for streaming
             flush_interval -1
-            
-            # Handle response codes for streaming
-            handle_response @streaming_response {
-                respond "" 206
-            }
         }
-    }
-    
-    # Define streaming response matcher
-    @streaming_response {
-        status 5xx
     }
     
     # Handle large uploads with appropriate timeouts
@@ -271,22 +261,9 @@
 
     # === ERROR HANDLING ===
     handle_errors {
-        # More comprehensive streaming error detection
-        @streaming_errors {
-            expression {err.id} == "reverseproxy.statuserror" && {http.request.header.Range} != ""
-        }
-        
-        @context_canceled {
-            expression {err.msg} == "reading: context canceled" || {err.msg} == "writing: write tcp" || {err.msg} == "aborting with incomplete response"
-        }
-        
         @rate_limit expression {http.error.status_code} == 429
         @forbidden expression {http.error.status_code} == 403
-        @server_error expression {http.error.status_code} >= 500 && {http.request.header.Range} == ""
-        
-        # Don't log streaming interruptions as errors
-        respond @streaming_errors "" 206
-        respond @context_canceled "" 206
+        @server_error expression {http.error.status_code} >= 500
         
         respond @rate_limit "Too Many Requests - Please slow down" 429
         respond @forbidden "Access Denied" 403
