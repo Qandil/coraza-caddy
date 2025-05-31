@@ -33,6 +33,13 @@
 
     # === SMART MATCHERS ===
     
+    # WebSocket detection - MORE SPECIFIC
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+        header_regexp Sec-WebSocket-Key .+
+    }
+    
     # Detect streaming/range requests
     @streaming {
         header Range *
@@ -43,15 +50,9 @@
         header Content-Length >10485760  # > 10MB
     }
     
-    # WebSocket detection
-    @websocket {
-        header Connection *upgrade*
-        header Upgrade websocket
-    }
-    
     # Requests that should go through WAF
     @waf_eligible {
-        not header Connection *upgrade*
+        not header Connection *Upgrade*
         not header Upgrade websocket
         not header Range *
         not header Content-Length >209715200  # Not larger than WAF limit
@@ -96,8 +97,8 @@
         }
     }
 
-    # === SECURITY HEADERS ===
-    header {
+    # === SECURITY HEADERS (NOT for WebSockets) ===
+    header @waf_eligible {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         Content-Security-Policy "upgrade-insecure-requests"
         Referrer-Policy "no-referrer"
@@ -163,8 +164,35 @@
     }
 
     # === REVERSE PROXY with adaptive configuration ===
+    # ORDER MATTERS: Most specific to least specific
     
-    # Handle streaming/range requests with optimized settings
+    # 1. WEBSOCKETS FIRST - Most specific, bypass everything
+    handle @websocket {
+        reverse_proxy {env.BACKEND} {
+            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up X-Real-IP {remote_host}
+            # Critical: Pass WebSocket headers exactly as received
+            header_up Connection {http.request.header.Connection}
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Sec-WebSocket-Key {http.request.header.Sec-WebSocket-Key}
+            header_up Sec-WebSocket-Version {http.request.header.Sec-WebSocket-Version}
+            header_up Sec-WebSocket-Extensions {http.request.header.Sec-WebSocket-Extensions}
+            header_up Sec-WebSocket-Accept {http.request.header.Sec-WebSocket-Accept}
+            header_up Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+            
+            transport http {
+                dial_timeout 10s
+                response_header_timeout 10s
+                keepalive_idle_conns 10
+                keepalive_idle_conns_per_host 2
+            }
+            
+            # No buffering for WebSockets
+            flush_interval -1
+        }
+    }
+    
+    # 2. Handle streaming/range requests
     handle @streaming {
         # Add specific headers for streaming
         header {
@@ -196,7 +224,7 @@
         }
     }
     
-    # Handle large uploads with appropriate timeouts
+    # 3. Handle large uploads
     handle @large_upload {
         reverse_proxy {env.BACKEND} {
             header_up Host {http.reverse_proxy.upstream.hostport}
@@ -215,21 +243,7 @@
         }
     }
     
-    # Handle WebSocket connections
-    handle @websocket {
-        reverse_proxy {env.BACKEND} {
-            header_up Host {http.reverse_proxy.upstream.hostport}
-            header_up X-Real-IP {remote_host}
-            
-            transport http {
-                dial_timeout 10s
-                keepalive_idle_conns 10
-                keepalive_idle_conns_per_host 2
-            }
-        }
-    }
-    
-    # Default handler for everything else
+    # 4. Default handler for everything else
     handle {
         reverse_proxy {env.BACKEND} {
             header_up Host {http.reverse_proxy.upstream.hostport}
