@@ -80,6 +80,7 @@
             # === REQUEST BODY LIMITS ===
             # Maximum request body size: 200MB (allows large file uploads)
             SecRequestBodyLimit 209715200
+            SecRequestBodyLimitAction Reject
             
             # Maximum request body size for non-file uploads: 1MB (forms, JSON, etc.)
             SecRequestBodyNoFilesLimit 1048576
@@ -87,17 +88,21 @@
             # === PARANOIA LEVEL CONFIGURATION ===
             # Paranoia Level 1 = Basic protection (fewer false positives)
             # Higher levels = more aggressive but more false positives
-            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=1"
             
-            # Blocking paranoia level - determines which rules actually block requests
+            # Paranoia levels
+            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
             
-            # Define allowed HTTP methods for your application
+            # Allowed methods
             SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
-
+            
             # === ALLOWED CONTENT TYPES ===
             # Allow common content types used by modern applications
             SecAction "id:900200,phase:1,nolog,pass,t:none,setvar:tx.allowed_request_content_type=|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |text/plain| |application/octet-stream| |image/jpeg| |image/png| |image/gif| |image/webp| |video/mp4| |video/avi| |video/mov| |video/quicktime| |video/x-msvideo|"
+            
+            # Anomaly scoring thresholds
+            SecAction "id:900110,phase:1,nolog,pass,t:none,setvar:tx.inbound_anomaly_score_threshold=10"
+            SecAction "id:900111,phase:1,nolog,pass,t:none,setvar:tx.critical_anomaly_score=5"            
             
             # === AUDIT LOGGING CONFIGURATION ===
             # Only log relevant security events (not every request)
