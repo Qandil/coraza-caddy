@@ -48,7 +48,7 @@
         Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=()"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "1; mode=block"
+        X-XSS-Protection "0"  # Disabled in modern browsers, can cause issues
         Cache-Control "no-cache, no-store, must-revalidate"
         -Server
         -X-Powered-By
