@@ -13,9 +13,11 @@
 
     respond /health 200
     
-    # Smart compression - exclude binary content
+    # Smart compression - exclude binary content AND WebSockets
     encode gzip zstd {
         match {
+            not header Connection *Upgrade*
+            not header Upgrade websocket
             header Content-Type text/*
             header Content-Type application/json*
             header Content-Type application/javascript*
@@ -33,7 +35,7 @@
 
     # === SMART MATCHERS ===
     
-    # WebSocket detection - GENERIC AND VERIFIED
+    # WebSocket detection
     @websocket {
         header Connection *Upgrade*
         header Upgrade websocket
@@ -54,12 +56,17 @@
         not header Connection *Upgrade*
         not header Upgrade websocket
         not header Range *
-        not header Content-Length >209715200  # Not larger than WAF limit
+        not header Content-Length >209715200
         not method OPTIONS
     }
 
-    # === SMART RATE LIMITING ===
-    rate_limit {
+    # === SMART RATE LIMITING - EXCLUDE WEBSOCKETS ===
+    @rate_limit_eligible {
+        not header Connection *Upgrade*
+        not header Upgrade websocket
+    }
+    
+    rate_limit @rate_limit_eligible {
         # Lenient limits for streaming/downloads
         zone streaming {
             key    {remote_host}
@@ -76,7 +83,7 @@
             window 1m
         }
         
-        # Strict limits for potential auth endpoints (generic detection)
+        # Strict limits for potential auth endpoints
         zone auth_like {
             key    {remote_host}
             match {
@@ -110,7 +117,7 @@
         -X-Powered-By
     }
 
-    # === WAF Configuration (only for eligible requests) ===
+    # === WAF Configuration ===
     coraza_waf @waf_eligible {
         load_owasp_crs
         
@@ -122,29 +129,17 @@
             SecRequestBodyAccess On
             SecResponseBodyAccess Off
             
-            # === REQUEST BODY LIMITS ===
-            # Maximum request body size: 200MB (allows large file uploads)
             SecRequestBodyLimit 209715200
             SecRequestBodyLimitAction Reject
-            
-            # Maximum request body size for non-file uploads: 1MB (forms, JSON, etc.)
             SecRequestBodyNoFilesLimit 1048576
             
-            # Moderate paranoia level
             SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=1"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
-            
-            # Allow common HTTP methods
             SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
-            
-            # Your specified content types
             SecAction "id:900200,phase:1,nolog,pass,t:none,setvar:tx.allowed_request_content_type=|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |text/plain| |application/octet-stream| |image/jpeg| |image/png| |image/gif| |image/webp| |video/mp4| |video/avi| |video/mov| |video/quicktime| |video/x-msvideo|"
-            
-            # Anomaly scoring
             SecAction "id:900110,phase:1,nolog,pass,t:none,setvar:tx.inbound_anomaly_score_threshold=10"
             SecAction "id:900111,phase:1,nolog,pass,t:none,setvar:tx.critical_anomaly_score=5"
             
-            # Logging
             SecAuditEngine RelevantOnly
             SecAuditLogParts ABCDEFGHIJKZ
             SecAuditLog /dev/stdout
@@ -154,7 +149,6 @@
             SecDebugLog /dev/stderr
             SecDebugLogLevel 1
             
-            # Performance tuning
             SecArgumentsLimit 1000
             SecCookieFormat 0
             
@@ -162,30 +156,16 @@
         `
     }
 
-    # === REVERSE PROXY with adaptive configuration ===
-    # ORDER MATTERS: Most specific to least specific
+    # === REVERSE PROXY - WEBSOCKETS MUST BE FIRST ===
     
-    # 1. WEBSOCKETS FIRST - Generic and working
+    # 1. WEBSOCKETS - Handle completely separately
     handle @websocket {
-        reverse_proxy {env.BACKEND} {
-            # Only pass essential headers, let Caddy handle WebSocket upgrade
-            header_up Host {upstream_hostport}
-            
-            transport http {
-                dial_timeout 10s
-                response_header_timeout 10s
-                keepalive_idle_conns 10
-                keepalive_idle_conns_per_host 2
-            }
-            
-            # No buffering for WebSockets
-            flush_interval -1
-        }
+        # NO additional processing for WebSockets
+        reverse_proxy {env.BACKEND}
     }
     
     # 2. Handle streaming/range requests
     handle @streaming {
-        # Add specific headers for streaming
         header {
             Accept-Ranges bytes
             Access-Control-Allow-Origin *
@@ -210,7 +190,6 @@
                 compression off
             }
             
-            # Critical for streaming
             flush_interval -1
         }
     }
