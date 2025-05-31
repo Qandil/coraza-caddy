@@ -4,8 +4,7 @@ FROM caddy:2.10-builder AS builder
 RUN xcaddy build \
     --with github.com/kirsch33/realip@v1.6.1 \
     --with github.com/corazawaf/coraza-caddy/v2@v2.0.0 \
-    --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0 \
-    --with github.com/mholt/caddy-ratelimit@latest
+    --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0
 
 ############ 2. RUNTIME STAGE ############
 FROM caddy:2.10-alpine
