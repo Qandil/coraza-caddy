@@ -6,15 +6,9 @@
 
 :{$PORT} {
     log {
-        # Filter out common streaming errors
-        filter {
-            wrap console
-            fields {
-                error delete_contains "broken pipe"
-                error delete_contains "stream error"
-                error delete_contains "context canceled"
-            }
-        }
+        output stdout
+        format json
+        level INFO
     }
 
     respond /health 200
