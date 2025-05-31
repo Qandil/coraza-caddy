@@ -16,17 +16,6 @@
         from   100.64.0.0/10
     }
 
-    # Rate limiting - 100 requests per minute per real IP  
-    route {
-        rate_limit {
-            zone dynamic {
-                key {http.request.remote.host}
-                window 1m
-                events 100
-            }
-        }
-    }
-
     @not_websocket {
         not header Connection *upgrade*
         not header Upgrade websocket
