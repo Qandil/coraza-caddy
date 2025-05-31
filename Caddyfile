@@ -48,7 +48,7 @@
             SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=2"
             SecAction "id:900002,phase:1,nolog,pass,t:none,setvar:tx.detection_paranoia_level=2"
-            SecAction "id:900010,phase:1,nolog,pass,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE'"
+            SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:'tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE'"
         `
     }
 
