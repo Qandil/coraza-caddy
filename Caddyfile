@@ -5,10 +5,30 @@
 }
 
 :{$PORT} {
-    log
+    log {
+        # Filter out common streaming errors
+        filter {
+            wrap console
+            fields {
+                error delete_contains "broken pipe"
+                error delete_contains "stream error"
+                error delete_contains "context canceled"
+            }
+        }
+    }
 
     respond /health 200
-    encode gzip zstd
+    
+    # Smart compression - exclude binary content
+    encode gzip zstd {
+        match {
+            header Content-Type text/*
+            header Content-Type application/json*
+            header Content-Type application/javascript*
+            header Content-Type application/xml*
+            header Content-Type application/x-www-form-urlencoded*
+        }
+    }
 
     realip {
         header X-Forwarded-For
@@ -17,8 +37,75 @@
         from   100.64.0.0/10
     }
 
+    # === SMART MATCHERS ===
+    
+    # Detect streaming/range requests
+    @streaming {
+        header Range *
+    }
+    
+    # Detect large uploads
+    @large_upload {
+        header Content-Length >10485760  # > 10MB
+    }
+    
+    # Detect binary content responses
+    @binary_content {
+        header Content-Type video/*
+        header Content-Type audio/*
+        header Content-Type image/*
+        header Content-Type application/octet-stream
+        header Content-Type application/pdf
+        header Content-Type application/zip
+        header Content-Type application/x-*
+    }
+    
+    # WebSocket detection
+    @websocket {
+        header Connection *upgrade*
+        header Upgrade websocket
+    }
+    
+    # Requests that should go through WAF
+    @waf_eligible {
+        not header Connection *upgrade*
+        not header Upgrade websocket
+        not header Range *
+        not header Content-Length >209715200  # Not larger than WAF limit
+        not method OPTIONS
+    }
+
+    # === SMART RATE LIMITING ===
     rate_limit {
-        # General rate limit per IP
+        # Lenient limits for streaming/downloads
+        zone streaming {
+            key    {remote_host}
+            match  header Range *
+            events 1000
+            window 1m
+        }
+        
+        # Lenient limits for large uploads
+        zone uploads {
+            key    {remote_host}
+            match  header Content-Length >1048576
+            events 100
+            window 1m
+        }
+        
+        # Strict limits for potential auth endpoints (generic detection)
+        zone auth_like {
+            key    {remote_host}
+            match {
+                method POST
+                header Content-Type application/json*
+                header Content-Length <1024
+            }
+            events 10
+            window 1m
+        }
+        
+        # General limits
         zone general {
             key    {remote_host}
             events 300
@@ -26,55 +113,30 @@
         }
     }
 
-    @not_websocket {
-        not header Connection *upgrade*
-        not header Upgrade websocket
-    }
-
+    # === SECURITY HEADERS ===
     header {
-        # HSTS with longer duration
-        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
-
-        # More restrictive CSP
-        Content-Security-Policy  upgrade-insecure-requests
-
-        # Additional security headers
-        X-DNS-Prefetch-Control "off"
-        X-Download-Options "noopen"
-        X-Permitted-Cross-Domain-Policies "none"
-
-        # Existing headers
-        Referrer-Policy "strict-origin-when-cross-origin"
-        Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=()"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        Content-Security-Policy "upgrade-insecure-requests"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "interest-cohort=()"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
-        X-XSS-Protection "0"  # Disabled in modern browsers, can cause issues
+        X-XSS-Protection "1; mode=block"
         Cache-Control "no-cache, no-store, must-revalidate"
         -Server
         -X-Powered-By
     }
 
-    coraza_waf @not_websocket {
-        # Load the OWASP Core Rule Set plugin
+    # === WAF Configuration (only for eligible requests) ===
+    coraza_waf @waf_eligible {
         load_owasp_crs
         
         directives `
-            # === CORE CONFIGURATION FILES ===
-            # Load Coraza recommended baseline settings (security defaults)
             Include @coraza.conf-recommended
-            
-            # Load CRS setup configuration (must come before CRS rules)
-            # Contains variable definitions and basic setup that CRS rules depend on
             Include @crs-setup.conf.example
             
-            # === WAF ENGINE SETTINGS ===
-            # Enable the WAF engine to actively block malicious requests
             SecRuleEngine On
-            
-            # Allow WAF to inspect request bodies (POST data, file uploads, etc.)
             SecRequestBodyAccess On
-            
-            # Disable response body inspection (saves performance, only inspect requests)
             SecResponseBodyAccess Off
             
             # === REQUEST BODY LIMITS ===
@@ -85,64 +147,152 @@
             # Maximum request body size for non-file uploads: 1MB (forms, JSON, etc.)
             SecRequestBodyNoFilesLimit 1048576
             
-            # === PARANOIA LEVEL CONFIGURATION ===
-            # Paranoia Level 1 = Basic protection (fewer false positives)
-            # Higher levels = more aggressive but more false positives
-            
-            # Paranoia levels
-            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=2"
+            # Moderate paranoia level
+            SecAction "id:900000,phase:1,nolog,pass,t:none,setvar:tx.paranoia_level=1"
             SecAction "id:900001,phase:1,nolog,pass,t:none,setvar:tx.blocking_paranoia_level=1"
             
-            # Allowed methods
+            # Allow common HTTP methods
             SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
             
-            # === ALLOWED CONTENT TYPES ===
-            # Allow common content types used by modern applications
+            # Your specified content types
             SecAction "id:900200,phase:1,nolog,pass,t:none,setvar:tx.allowed_request_content_type=|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |text/plain| |application/octet-stream| |image/jpeg| |image/png| |image/gif| |image/webp| |video/mp4| |video/avi| |video/mov| |video/quicktime| |video/x-msvideo|"
             
-            # Anomaly scoring thresholds
+            # Anomaly scoring
             SecAction "id:900110,phase:1,nolog,pass,t:none,setvar:tx.inbound_anomaly_score_threshold=10"
-            SecAction "id:900111,phase:1,nolog,pass,t:none,setvar:tx.critical_anomaly_score=5"            
+            SecAction "id:900111,phase:1,nolog,pass,t:none,setvar:tx.critical_anomaly_score=5"
             
-            # === AUDIT LOGGING CONFIGURATION ===
-            # Only log relevant security events (not every request)
+            # Logging
             SecAuditEngine RelevantOnly
-            
-            # Log parts: A=Audit log header, B=Request headers, C=Request body, 
-            # D=Reserved, E=Response body, F=Response headers, G=Reserved, 
-            # H=Audit log trailer, I=Request body alternative, J=Request headers alternative,
-            # K=List of rules matched, Z=Final boundary
             SecAuditLogParts ABCDEFGHIJKZ
-            
-            # Send audit logs to stdout (captured by Railway logs)
             SecAuditLog /dev/stdout
-            
-            # Use JSON format for structured logging (easier to parse)
             SecAuditLogFormat json
-            
-            # === DEBUG LOGGING ===
-            # Send debug information to stderr
+            SecAuditLogType Serial
+            SecAuditLogRelevantStatus "^(?:5|4[01][0-9])"
             SecDebugLog /dev/stderr
-            
-            # Debug level 1 = Errors only (production appropriate)
-            # Level 3+ = Verbose (only for debugging issues)
             SecDebugLogLevel 1
             
-            # === LOAD SECURITY RULES ===
-            # Load all OWASP Core Rule Set rules (MUST be last)
-            # These are the actual security rules that detect attacks
+            # Performance tuning
+            SecArgumentsLimit 1000
+            SecCookieFormat 0
+            
             Include @owasp_crs/*.conf
         `
     }
 
-    reverse_proxy {env.BACKEND} {
-        header_up X-Forwarded-Proto  https
-        header_up X-Forwarded-Scheme https
-        transport http {
-            dial_timeout 5s
-            response_header_timeout 10s
-            read_timeout 30s
-            write_timeout 30s
+    # === REVERSE PROXY with adaptive configuration ===
+    
+    # Handle streaming/range requests with optimized settings
+    handle @streaming {
+        reverse_proxy {env.BACKEND} {
+            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Scheme https
+            
+            transport http {
+                dial_timeout 10s
+                response_header_timeout 60s
+                read_timeout 600s      # 10 min for streaming
+                write_timeout 600s     # 10 min for streaming
+                keepalive 120s
+                compression off
+            }
+            
+            # Critical for streaming
+            flush_interval -1
+            buffer_requests off
+            buffer_responses off
         }
+    }
+    
+    # Handle large uploads with appropriate timeouts
+    handle @large_upload {
+        reverse_proxy {env.BACKEND} {
+            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Scheme https
+            
+            transport http {
+                dial_timeout 10s
+                response_header_timeout 30s
+                read_timeout 300s      # 5 min for uploads
+                write_timeout 300s     # 5 min for uploads
+                keepalive 90s
+            }
+            
+            flush_interval 100ms
+        }
+    }
+    
+    # Handle WebSocket connections
+    handle @websocket {
+        reverse_proxy {env.BACKEND} {
+            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            
+            transport http {
+                dial_timeout 10s
+                keepalive 3600s    # 1 hour for websockets
+            }
+        }
+    }
+    
+    # Default handler for everything else
+    handle {
+        reverse_proxy {env.BACKEND} {
+            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto https
+            header_up X-Forwarded-Scheme https
+            
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 10s
+                read_timeout 30s
+                write_timeout 30s
+                max_idle_conns 100
+                max_idle_conns_per_host 10
+                max_conns_per_host 0
+                keepalive 30s
+                compression off
+            }
+            
+            health_uri /health
+            health_interval 10s
+            health_timeout 5s
+            health_status 200
+            
+            lb_policy least_conn
+            lb_try_duration 30s
+            lb_try_interval 250ms
+            
+            fail_duration 10s
+            max_fails 3
+            unhealthy_request_count 5
+        }
+    }
+
+    # === ERROR HANDLING ===
+    handle_errors {
+        # Suppress common streaming errors
+        @streaming_errors {
+            expression {http.error.status_text} == "broken pipe" || {http.error.status_text} == "stream error" || {http.error.status_text} == "context canceled"
+        }
+        
+        @rate_limit expression {http.error.status_code} == 429
+        @forbidden expression {http.error.status_code} == 403
+        @server_error expression {http.error.status_code} >= 500
+        
+        # Return 200 for expected streaming interruptions
+        respond @streaming_errors 200
+        
+        respond @rate_limit "Too Many Requests - Please slow down" 429
+        respond @forbidden "Access Denied" 403
+        respond @server_error "Service Temporarily Unavailable" 503
     }
 }
