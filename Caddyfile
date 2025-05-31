@@ -33,11 +33,10 @@
 
     # === SMART MATCHERS ===
     
-    # WebSocket detection - MORE SPECIFIC
+    # WebSocket detection - GENERIC AND VERIFIED
     @websocket {
         header Connection *Upgrade*
         header Upgrade websocket
-        header_regexp Sec-WebSocket-Key .+
     }
     
     # Detect streaming/range requests
@@ -166,19 +165,11 @@
     # === REVERSE PROXY with adaptive configuration ===
     # ORDER MATTERS: Most specific to least specific
     
-    # 1. WEBSOCKETS FIRST - Most specific, bypass everything
+    # 1. WEBSOCKETS FIRST - Generic and working
     handle @websocket {
         reverse_proxy {env.BACKEND} {
-            header_up Host {http.reverse_proxy.upstream.hostport}
-            header_up X-Real-IP {remote_host}
-            # Critical: Pass WebSocket headers exactly as received
-            header_up Connection {http.request.header.Connection}
-            header_up Upgrade {http.request.header.Upgrade}
-            header_up Sec-WebSocket-Key {http.request.header.Sec-WebSocket-Key}
-            header_up Sec-WebSocket-Version {http.request.header.Sec-WebSocket-Version}
-            header_up Sec-WebSocket-Extensions {http.request.header.Sec-WebSocket-Extensions}
-            header_up Sec-WebSocket-Accept {http.request.header.Sec-WebSocket-Accept}
-            header_up Sec-WebSocket-Protocol {http.request.header.Sec-WebSocket-Protocol}
+            # Only pass essential headers, let Caddy handle WebSocket upgrade
+            header_up Host {upstream_hostport}
             
             transport http {
                 dial_timeout 10s
@@ -204,7 +195,7 @@
         }
         
         reverse_proxy {env.BACKEND} {
-            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up Host {upstream_hostport}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
@@ -227,7 +218,7 @@
     # 3. Handle large uploads
     handle @large_upload {
         reverse_proxy {env.BACKEND} {
-            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up Host {upstream_hostport}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
@@ -246,7 +237,7 @@
     # 4. Default handler for everything else
     handle {
         reverse_proxy {env.BACKEND} {
-            header_up Host {http.reverse_proxy.upstream.hostport}
+            header_up Host {upstream_hostport}
             header_up X-Real-IP {remote_host}
             header_up X-Forwarded-Proto https
             header_up X-Forwarded-Scheme https
