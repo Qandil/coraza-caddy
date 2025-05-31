@@ -27,8 +27,11 @@
         Referrer-Policy          no-referrer
         Permissions-Policy       interest-cohort=()
         X-Content-Type-Options   nosniff
-        X-Frame-Options          SAMEORIGIN
+        X-Frame-Options "SAMEORIGIN"
+        X-XSS-Protection "1; mode=block"
+        Cache-Control "no-cache, no-store, must-revalidate"
         -Server
+        -X-Powered-By
     }
 
     coraza_waf @not_websocket {
