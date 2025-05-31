@@ -44,9 +44,14 @@
             SecAction "id:900000,phase:1,setvar:'tx.paranoia_level=2'"
             SecRuleEngine On
             SecAuditEngine RelevantOnly
-            SecAuditLogParts ABIFHZ
+            SecAuditLogParts ABCDEFGHIJKZ
             SecAuditLog /dev/stdout
             SecAuditLogFormat json
+            SecAction "id:900001,phase:1,pass,setvar:'tx.blocking_paranoia_level=2'"
+            SecAction "id:900002,phase:1,pass,setvar:'tx.detection_paranoia_level=2'"
+            SecDebugLog /dev/stderr
+            SecDebugLogLevel 9
+            SecComponentSignature "Coraza WAF v3.x"
         `
     }
 
