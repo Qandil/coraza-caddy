@@ -84,6 +84,10 @@
             
             # Define allowed HTTP methods for your application
             SecAction "id:900010,phase:1,nolog,pass,t:none,setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
+
+            # === ALLOWED CONTENT TYPES ===
+            # Allow common content types used by modern applications
+            SecAction "id:900200,phase:1,nolog,pass,t:none,setvar:tx.allowed_request_content_type=|application/x-www-form-urlencoded| |multipart/form-data| |multipart/related| |text/xml| |application/xml| |application/soap+xml| |application/json| |application/cloudevents+json| |application/cloudevents-batch+json| |text/plain| |application/octet-stream| |image/jpeg| |image/png| |image/gif| |image/webp| |video/mp4| |video/avi| |video/mov| |video/quicktime| |video/x-msvideo|"
             
             # === AUDIT LOGGING CONFIGURATION ===
             # Only log relevant security events (not every request)
