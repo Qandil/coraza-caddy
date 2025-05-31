@@ -17,7 +17,9 @@
     }
 
     # Rate limiting - 100 requests per minute per real IP
-    rate_limit 100-M {http.request.remote.host}
+    route {
+        rate_limit 100-M {http.request.remote.host}
+    }
 
     @not_websocket {
         not header Connection *upgrade*
