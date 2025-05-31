@@ -16,12 +16,11 @@
         from   100.64.0.0/10
     }
 
-    # Rate limiting - 100 requests per minute per real IP
+    # Rate limiting - 100 requests per minute per real IP  
     route {
-        rate_limit {
+        ratelimit {
             key {http.request.remote.host}
-            window 1m
-            max_requests 100
+            rate 100/1m
         }
     }
 
