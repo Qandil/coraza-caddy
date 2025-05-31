@@ -5,7 +5,7 @@ RUN xcaddy build \
     --with github.com/kirsch33/realip@v1.6.1 \
     --with github.com/corazawaf/coraza-caddy/v2@v2.0.0 \
     --with github.com/corazawaf/coraza-coreruleset/v4@v4.14.0 \
-    --with github.com/RussellLuo/caddy-ext/ratelimit@v0.3.0
+    --with github.com/mholt/caddy-ratelimit@v1.4.11
 
 ############ 2. RUNTIME STAGE ############
 FROM caddy:2.10-alpine
