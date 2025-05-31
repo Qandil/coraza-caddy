@@ -18,9 +18,12 @@
 
     # Rate limiting - 100 requests per minute per real IP  
     route {
-        ratelimit {
-            key {http.request.remote.host}
-            rate 100/1m
+        rate_limit {
+            zone dynamic {
+                key {http.request.remote.host}
+                window 1m
+                events 100
+            }
         }
     }
 
